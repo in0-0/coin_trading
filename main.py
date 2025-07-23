@@ -17,7 +17,7 @@ def main():
         return
 
     # --- 사용할 전략 선택 ---
-    strategy_name = "ma_cross"
+    strategy_name = "vol_momentum"
 
     # --- 설정 로드 ---
     config = STRATEGY_CONFIG.get(strategy_name)
@@ -31,18 +31,16 @@ def main():
     interval = TRADE_SETTINGS.get("interval")
     start_date = TRADE_SETTINGS.get("start_date", "1 year ago UTC")
     initial_capital = BACKTEST_SETTINGS.get("initial_capital", 10000)
+    take_profit_pct = config.get("take_profit_pct")
+    stop_loss_pct = config.get("stop_loss_pct")
 
     # --- 초기화 ---
     binance_data = BinanceData(api_key, secret_key)
     strategy_factory = StrategyFactory()
-    backtester = Backtester(initial_capital)
+    backtester = Backtester(initial_capital, take_profit_pct, stop_loss_pct)
 
     # 팩토리에서 전략 객체 생성
-    try:
-        strategy = strategy_factory.get_strategy(strategy_name, **strategy_params)
-    except ValueError as e:
-        print(e)
-        return
+    strategy = strategy_factory.get_strategy(strategy_name, **strategy_params)
 
     # --- 데이터 가져오기 및 전략 적용 ---
     print(f"Fetching data for {symbol} with interval {interval} from {start_date}...")

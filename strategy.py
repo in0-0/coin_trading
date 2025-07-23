@@ -6,90 +6,82 @@ def calculate_rsi(df: pd.DataFrame, period=14) -> pd.Series:
     delta = df['Close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
-
     avg_gain = gain.rolling(window=period, min_periods=1).mean()
     avg_loss = loss.rolling(window=period, min_periods=1).mean()
-
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
 class Strategy(ABC):
-    """모든 트레이딩 전략의 기본이 되는 추상 클래스"""
     @abstractmethod
     def apply_strategy(self, df: pd.DataFrame) -> pd.DataFrame:
-        """전략을 데이터에 적용하고, 매수/매도 신호를 포함한 DataFrame을 반환합니다."""
         pass
 
 class MovingAverageCrossStrategy(Strategy):
-    """단순 이동평균 교차 전략"""
+    """단순 이동평균 교차 전략
+
+    이 전략은 자체적으로 매수(1)와 매도(-1) 신호를 모두 생성하여 완결된 형태입니다.
+    """
     def __init__(self, short_window=20, long_window=50):
         self.short_window = short_window
         self.long_window = long_window
 
     def apply_strategy(self, df: pd.DataFrame) -> pd.DataFrame:
-        print(f"Applying Moving Average Cross Strategy ({self.short_window}/{self.long_window})...")
         df[f'MA_{self.short_window}'] = df['Close'].rolling(window=self.short_window).mean()
         df[f'MA_{self.long_window}'] = df['Close'].rolling(window=self.long_window).mean()
-
-        # 신호 생성:
-        # - Signal 1: 매수 (단기 이평선이 장기 이평선을 상향 돌파)
-        # - Signal -1: 매도 (단기 이평선이 장기 이평선을 하향 돌파)
-        # - Signal 0: 관망
         df['Signal'] = 0
         df.loc[df[f'MA_{self.short_window}'] > df[f'MA_{self.long_window}'], 'Signal'] = 1
         df.loc[df[f'MA_{self.short_window}'] < df[f'MA_{self.long_window}'], 'Signal'] = -1
         return df
 
 class BuyAndHoldStrategy(Strategy):
-    """단순 매수 후 보유 전략"""
+    """단순 매수 후 보유 전략
+
+    매수 신호(1)만 생성하며, 별도의 매도 로직 없이 데이터 끝까지 보유합니다.
+    """
     def apply_strategy(self, df: pd.DataFrame) -> pd.DataFrame:
-        print("Applying Buy and Hold Strategy...")
-        # 신호 생성:
-        # - Signal 1: 첫날 매수 후 계속 보유
         df['Signal'] = 1
         return df
 
 class VolatilityMomentumStrategy(Strategy):
-    """변동성 돌파 + 모멘텀 복합 전략"""
+    """변동성 돌파 + 모멘텀 복합 전략
+
+    매수 신호(1)만 생성합니다.
+    **매도(청산) 로직은 Backtester가 config.py의 exit_params에 따라 처리합니다.**
+    (예: 손절, 타임컷 등)
+    """
     def __init__(self, k=0.5, rsi_period=14, rsi_threshold=50):
         self.k = k
         self.rsi_period = rsi_period
         self.rsi_threshold = rsi_threshold
 
     def apply_strategy(self, df: pd.DataFrame) -> pd.DataFrame:
-        print(f"Applying Volatility Breakout + Momentum Strategy (k={self.k}, rsi_threshold={self.rsi_threshold})...")
         df['Range'] = (df['High'].shift(1) - df['Low'].shift(1))
         df['Breakout_Target'] = df['Open'] + df['Range'] * self.k
         df[f'RSI_{self.rsi_period}'] = calculate_rsi(df, self.rsi_period)
-
-        # 신호 생성:
-        # - Signal 1: 매수 (당일 고가가 변동성 돌파 목표가를 넘고, RSI가 임계값보다 높을 때)
-        # - Signal 0: 관망
         df['Signal'] = 0
         df.loc[(df['High'] > df['Breakout_Target']) & (df[f'RSI_{self.rsi_period}'] > self.rsi_threshold), 'Signal'] = 1
         return df
 
 class MAReversionStrategy(Strategy):
-    """이동평균 리버전 전략"""
+    """이동평균 리버전 전략
+
+    매수 신호(1)만 생성합니다.
+    **매도(청산) 로직은 Backtester가 config.py의 exit_params에 따라 처리합니다.**
+    (예: 익절, 손절, 이평선 도달 등)
+    """
     def __init__(self, ma_period=20, reversion_pct=0.05):
         self.ma_period = ma_period
         self.reversion_pct = reversion_pct
 
     def apply_strategy(self, df: pd.DataFrame) -> pd.DataFrame:
-        print(f"Applying Moving Average Reversion Strategy (ma_period={self.ma_period}, reversion_pct={self.reversion_pct})...")
         df[f'MA_{self.ma_period}'] = df['Close'].rolling(window=self.ma_period).mean()
         df['Reversion_Target'] = df[f'MA_{self.ma_period}'] * (1 - self.reversion_pct)
-
-        # 신호 생성:
-        # - Signal 1: 매수 (종가가 이동평균선에서 특정 비율 이상 하락했을 때)
-        # - Signal 0: 관망
         df['Signal'] = 0
         df.loc[df['Close'] < df['Reversion_Target'], 'Signal'] = 1
         return df
 
 class StrategyFactory:
-    """전략 객체를 생성하는 팩토리 클래스"""
     def __init__(self):
         self._strategies = {
             "ma_cross": MovingAverageCrossStrategy,
