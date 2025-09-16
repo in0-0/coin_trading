@@ -1,80 +1,69 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from live_trader import LiveTrader
-from binance.exceptions import BinanceAPIException
+
+import pandas as pd
+
+from models import Position, Signal
+from live_trader_gpt import LiveTrader
 
 
 class TestLiveTrader(unittest.TestCase):
-    def setUp(self):
-        """테스트를 위한 LiveTrader 인스턴스와 mock client를 설정합니다."""
-        self.mock_client = MagicMock()
+    @patch("live_trader_gpt.Client")
+    @patch("live_trader_gpt.BinanceData")
+    @patch("live_trader_gpt.StateManager")
+    def test_entry_and_exit_flow(self, MockStateManager, MockBinanceData, MockClient):
+        # Mock client and environment
+        mock_client_instance = MagicMock()
+        MockClient.return_value = mock_client_instance
 
-        # LiveTrader를 인스턴스화할 때 mock client를 주입하기 위해 patch 사용
-        self.patcher = patch("live_trader.Client", return_value=self.mock_client)
-        self.mock_client_class = self.patcher.start()
+        # Mock StateManager load/save
+        mock_sm_instance = MockStateManager.return_value
+        mock_sm_instance.load_positions.return_value = {}
 
-        self.trader = LiveTrader(
-            api_key="test_key", secret_key="test_secret", symbol="BTCUSDT"
-        )
+        # Mock data provider
+        mock_bd_instance = MockBinanceData.return_value
+        df = pd.DataFrame({
+            "Open time": pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03"]),
+            "Open": [10, 11, 12],
+            "High": [11, 12, 13],
+            "Low": [9, 10, 11],
+            "Close": [10.5, 11.5, 12.5],
+            "Volume": [100, 100, 100],
+            # provide atr to avoid fallback path randomness
+            "atr": [0.5, 0.6, 0.7],
+        })
+        mock_bd_instance.get_and_update_klines.return_value = df
+        mock_bd_instance.get_current_price.return_value = 100.0
 
-    def tearDown(self):
-        """모든 테스트 후에 patch를 중지합니다."""
-        self.patcher.stop()
+        # Mock account balance to allow entries
+        mock_client_instance.get_account.return_value = {"balances": [{"asset": "USDT", "free": "1000"}]}
 
-    def test_get_account_balance(self):
-        """계좌 잔고 조회 기능을 테스트합니다."""
-        self.mock_client.get_asset_balance.return_value = {
-            "asset": "USDT",
-            "free": "10000.0",
-        }
-        balance = self.trader.get_account_balance("USDT")
+        # Patch StrategyFactory to force BUY then SELL
+        with patch("live_trader_gpt.StrategyFactory") as MockFactory:
+            buy_call = MagicMock()
+            buy_call.get_signal.return_value = Signal.BUY
+            # map for all symbols
+            MockFactory.return_value.create_strategy.return_value = buy_call
 
-        self.mock_client.get_asset_balance.assert_called_once_with(asset="USDT")
-        self.assertEqual(balance, 10000.0)
+            trader = LiveTrader()
 
-    def test_get_account_balance_api_error(self):
-        """API 에러 발생 시 잔고 조회 실패를 테스트합니다."""
-        self.mock_client.get_asset_balance.side_effect = BinanceAPIException(
-            "API Error"
-        )
-        balance = self.trader.get_account_balance("USDT")
-        self.assertEqual(balance, 0.0)
+            # Trigger a single pass of entries
+            trader._find_and_execute_entries()
+            # After BUY for first symbol, positions should have at least one entry
+            self.assertGreaterEqual(len(trader.positions), 1)
+            mock_sm_instance.save_positions.assert_called()
 
-    @patch("numpy.log10")
-    def test_create_order_formatting(self, mock_log10):
-        """주문 생성 시 수량이 올바르게 포맷되는지 테스트합니다."""
-        mock_log10.return_value = -2  # 정밀도 2로 가정
-        self.mock_client.get_symbol_info.return_value = {
-            "filters": [{"filterType": "LOT_SIZE", "stepSize": "0.01"}]
-        }
-        self.trader.create_order("BUY", 1.23456)
-
-        # create_order가 '1.23'으로 호출되었는지 확인
-        self.mock_client.create_order.assert_called_once()
-        call_args = self.mock_client.create_order.call_args
-        self.assertEqual(call_args[1]["quantity"], "1.23")
-
-    def test_create_order_success(self):
-        """주문 생성 성공 케이스를 테스트합니다."""
-        self.mock_client.create_order.return_value = {"symbol": "BTCUSDT", "orderId": 1}
-        # _get_formatted_quantity를 모의 처리하여 네트워크 호출 방지
-        with patch.object(
-            self.trader, "_get_formatted_quantity", return_value="1.0"
-        ) as mock_format:
-            order = self.trader.create_order("BUY", 1.0)
-            mock_format.assert_called_once_with(1.0)
-            self.mock_client.create_order.assert_called_once_with(
-                symbol="BTCUSDT", side="BUY", type="MARKET", quantity="1.0"
-            )
-            self.assertEqual(order["orderId"], 1)
-
-    def test_create_order_api_error(self):
-        """API 에러 발생 시 주문 생성 실패를 테스트합니다."""
-        self.mock_client.create_order.side_effect = BinanceAPIException("Order Error")
-        with patch.object(self.trader, "_get_formatted_quantity", return_value="1.0"):
-            order = self.trader.create_order("SELL", 1.0)
-            self.assertIsNone(order)
+            # Now force SELL on that symbol
+            first_symbol = next(iter(trader.positions.keys()))
+            buy_call.get_signal.return_value = Signal.SELL
+            # Ensure stop check triggers sell too when price <= stop
+            trader._find_and_execute_entries()
+            # SELL path uses _place_sell_order, which deletes position
+            # For deterministic exit, call directly
+            trader._place_sell_order(first_symbol)
+            self.assertNotIn(first_symbol, trader.positions)
 
 
 if __name__ == "__main__":
     unittest.main()
+

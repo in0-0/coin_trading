@@ -26,14 +26,14 @@
 
 ## 2) 테스트 정리 (Day 2)
 
-- [ ] 레거시/손상 테스트 정리
-    - [ ] 삭제된 모듈 참조(`backtester.py`, `main.py`, `strategy.py`, `position_sizer.py`, `live_trader.py`) 테스트 폐기 또는 `_archive/tests`로 이동
-    - [ ] 손상된 `tests/test_backtester.py` 정리(보관 또는 삭제)
-- [ ] 신규 단위 테스트 작성/수정
-    - [ ] `tests/test_binance_data.py`: `get_and_update_klines`와 타입/컬럼 보장 검증(Mock 클라이언트)
-    - [ ] `tests/test_state_manager.py`: 심볼별 `get_position/upsert_position` 추가 검증
-    - [ ] `tests/test_strategy.py`: ATR 전략 신호/컬럼 케이스 검증
-    - [ ] `tests/test_live_trader.py`: Binance `Client` 모킹 후 엔트리/청산 플로우 검증
+- [x] 레거시/손상 테스트 정리
+    - [x] 삭제된 모듈 참조(`backtester.py`, `main.py`, `strategy.py`, `position_sizer.py`, `live_trader.py`) 테스트 폐기 또는 `_archive/tests`로 이동
+    - [x] 손상된 `tests/test_backtester.py` 정리(보관 또는 삭제)
+- [x] 신규 단위 테스트 작성/수정
+    - [x] `tests/test_binance_data.py`: `get_and_update_klines`와 타입/컬럼 보장 검증(Mock 클라이언트)
+    - [x] `tests/test_state_manager.py`: 심볼별 `get_position/upsert_position` 추가 검증
+    - [x] `tests/test_strategy.py`: ATR 전략 신호/컬럼 케이스 검증
+    - [x] `tests/test_live_trader.py`: Binance `Client` 모킹 후 엔트리/청산 플로우 검증
 
 ## 3) 품질/구조/CI (Day 3)
 
