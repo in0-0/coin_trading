@@ -3,8 +3,17 @@ name = "coin-trading"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
+    "jupyter>=1.1.1",
+    "matplotlib>=3.9.4",
+    "optuna>=4.4.0",
+    "pandas>=2.3.1",
+    "pandas-ta>=0.4.71b0",
+    "python-binance>=1.0.29",
     "python-dotenv>=1.1.1",
     "ruff>=0.11.5",
+    "scikit-optimize>=0.10.2",
+    "superclaude>=3.0.0.2",
+    "tqdm>=4.67.1",
 ]
