@@ -42,3 +42,11 @@ class Position:
     def __repr__(self):
         return (f"Position(symbol={self.symbol}, qty={self.qty}, "
                 f"entry_price={self.entry_price}, stop_price={self.stop_price})")
+
+    # ---- Helper methods ----
+    def is_open(self) -> bool:
+        return self.qty is not None and self.qty > 0
+
+    def is_long(self) -> bool:
+        # We only support long for now; extend later if needed
+        return True

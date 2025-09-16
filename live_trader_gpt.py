@@ -101,7 +101,6 @@ class LiveTrader:
             symbol=symbol,
             atr_multiplier=ATR_MULTIPLIER,
             risk_per_trade=RISK_PER_TRADE,
-            state_manager=self.state_manager
         )
 
     def run(self):
@@ -139,7 +138,7 @@ class LiveTrader:
 
             strategy = self.strategies[sym]
             market_data = self.data_provider.get_and_update_klines(sym, EXECUTION_TIMEFRAME)
-            signal = strategy.get_signal(market_data)
+            signal = strategy.get_signal(market_data, self.positions.get(sym))
             logging.info(f"Signal for {sym}: {signal}")
 
             if signal == Signal.BUY:
@@ -172,12 +171,18 @@ class LiveTrader:
             qty = usdt_to_spend / price
             logging.info(f"Executing market BUY for {symbol}, qty ~{qty:.6f}")
 
-            # The position is already updated by the strategy, so we just need to get it
-            position = self.strategies[symbol].state_manager.get_position()
+            # Create Position on BUY with stop_price set using ATR trailing rule
+            current_df = self.data_provider.get_and_update_klines(symbol, EXECUTION_TIMEFRAME)
+            latest_close = float(current_df['Close'].iloc[-1])
+            # Conservative ATR calc for stop; if atr not present, fallback
+            atr = float(current_df['atr'].iloc[-1]) if 'atr' in current_df.columns else latest_close * 0.02
+            stop_price = float(max(0.0, latest_close - atr * ATR_MULTIPLIER))
+            qty = usdt_to_spend / price
+            position = Position(symbol=symbol, qty=qty, entry_price=latest_close, stop_price=stop_price)
 
             self.positions[symbol] = position
             self.state_manager.save_positions(self.positions)
-            self.tg_send(f"✅ BUY {symbol} @ ${position.entry_price:.4f}\nQty: {qty:.6f}\nStop: ${position.stop_loss:.4f}")
+            self.tg_send(f"✅ BUY {symbol} @ ${position.entry_price:.4f}\nQty: {qty:.6f}\nStop: ${position.stop_price:.4f}")
         except Exception as e:
             logging.exception(f"Failed to place BUY order for {symbol}: {e}")
             self.tg_send(f"❌ BUY FAILED for {symbol}: {e}")

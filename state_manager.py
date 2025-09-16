@@ -38,3 +38,26 @@ class StateManager:
         except (IOError, json.JSONDecodeError) as e:
             logging.error(f"Error loading state from {self.state_file}: {e}")
             return {}
+
+    # --- Per-symbol CRUD compatible with existing save/load ---
+    def get_position(self, symbol: str) -> Position | None:
+        try:
+            positions = self.load_positions()
+            return positions.get(symbol)
+        except Exception as e:
+            logging.error(f"Error getting position for {symbol}: {e}")
+            return None
+
+    def upsert_position(self, symbol: str, position: Position | None) -> Dict[str, Position]:
+        try:
+            positions = self.load_positions()
+            if position is None:
+                if symbol in positions:
+                    del positions[symbol]
+            else:
+                positions[symbol] = position
+            self.save_positions(positions)
+            return positions
+        except Exception as e:
+            logging.error(f"Error upserting position for {symbol}: {e}")
+            return self.load_positions()

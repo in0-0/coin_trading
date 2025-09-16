@@ -1,43 +1,51 @@
 # 자동 거래 시스템 안정화 리팩토링 계획 (TODO)
 
-## 1. 데이터 계층: 증분 업데이트 및 영속성 구축
+본 계획은 3단계(런타임 안정화 → 테스트 정리 → 품질/CI)로 진행합니다. 현재 코드 구조와 일치하도록 파일명을 최신화했습니다.
 
-- [ ] **`data_provider.py` 모듈 생성 또는 `binance_data.py` 확장:**
-    - [ ] `get_klines(symbol, timeframe)` 함수 구현:
-        - [ ] **로컬 데이터 확인:** `data/{symbol}_{timeframe}.csv` 파일 존재 여부 확인.
-        - [ ] **증분 업데이트:** 파일이 있으면 마지막 타임스탬프를 읽어와, 그 이후의 최신 캔들 데이터만 API로 요청 (`startTime` 파라미터 활용).
-        - [ ] **초기 데이터 로드:** 파일이 없으면, 보조지표 계산에 충분한 과거 데이터(e.g., 1000개)를 다운로드하여 새 CSV 파일 생성.
-        - [ ] **데이터 병합 및 저장:** 새로 받은 데이터를 기존 데이터와 병합하고 중복 제거 후 전체를 다시 CSV에 저장.
-        - [ ] **DataFrame 반환:** 항상 최신 데이터가 포함된 전체 Pandas DataFrame을 반환.
+## 1) 런타임 안정화 (Day 1)
 
-## 2. 전략 계층: "Repainting" 없는 신호 계산
+- [x] `binance_data.py` 데이터 일관성/증분 업데이트 안정화
+    - [x] 기존 CSV 로드 시 컬럼 케이스 오타 수정 (`"Open time"` 파싱 라인 수정)
+    - [x] 숫자 컬럼 타입 강제(`Open/High/Low/Close/Volume`)
+    - [x] `get_and_update_klines(symbol, interval)` 반환 컬럼을 `TARGET_COLUMNS`로 일관화
+    - [x] 에러 로깅 및 빈 데이터 처리 보강
+- [x] `models.py` 포지션 모델 고도화
+    - [x] `Position`에 헬퍼 추가(`is_open()`, `is_long()`), 필드명 `stop_price`로 통일
+    - [x] 직렬화/역직렬화 로직 유지 및 타입 힌트 강화
+- [x] `state_manager.py` 심볼별 포지션 CRUD 추가
+    - [x] `get_position(symbol)`, `upsert_position(symbol, position|None)` 구현
+    - [x] 기존 `save_positions()/load_positions()`와 호환 유지
+- [x] 전략 인터페이스 통일
+    - [x] `strategies/base_strategy.py`: `get_signal(market_data, position) -> Signal`
+    - [x] `strategies/atr_trailing_stop_strategy.py`에서 `StateManager` 직접 접근 제거, 입력 `position` 기반 판정으로 수정
+    - [x] 컬럼 접근을 Title case(`Close/High/Low`)로 통일
+- [x] `live_trader_gpt.py` 실행 로직 정합성
+    - [x] 전략 호출 시 현재 포지션 전달: `strategy.get_signal(df, positions.get(sym))`
+    - [x] BUY 시 `Position` 생성 및 `stop_price` 사용, SELL 시 포지션 제거 및 저장
+    - [x] 메시지/로그에서 `stop_loss`→`stop_price` 용어 통일
 
-- [ ] **`strategy.py` 모듈 리팩토링:**
-    - [ ] `calculate_aggregate_signal(df_dict)` 함수 재설계:
-        - [ ] 입력값으로 각 타임프레임별 DataFrame을 담은 딕셔너리(`{'1h': df_1h, '4h': df_4h, ...}`)를 받도록 수정.
-        - [ ] **마감된 캔들 기준 계산:** 모든 보조지표(EMA, RSI, BB) 계산 시, `df.iloc[-2]`를 사용하여 가장 최근에 '마감된' 캔들 데이터를 사용하도록 로직 수정.
-        - [ ] 최종 가중 점수를 계산하여 반환.
+## 2) 테스트 정리 (Day 2)
 
-## 3. 상태 관리 계층: 포지션 정보 영속화
+- [ ] 레거시/손상 테스트 정리
+    - [ ] 삭제된 모듈 참조(`backtester.py`, `main.py`, `strategy.py`, `position_sizer.py`, `live_trader.py`) 테스트 폐기 또는 `_archive/tests`로 이동
+    - [ ] 손상된 `tests/test_backtester.py` 정리(보관 또는 삭제)
+- [ ] 신규 단위 테스트 작성/수정
+    - [ ] `tests/test_binance_data.py`: `get_and_update_klines`와 타입/컬럼 보장 검증(Mock 클라이언트)
+    - [ ] `tests/test_state_manager.py`: 심볼별 `get_position/upsert_position` 추가 검증
+    - [ ] `tests/test_strategy.py`: ATR 전략 신호/컬럼 케이스 검증
+    - [ ] `tests/test_live_trader.py`: Binance `Client` 모킹 후 엔트리/청산 플로우 검증
 
-- [ ] **`state_manager.py` 모듈 활용:**
-    - [ ] `save_positions(positions: dict)` 함수 구현:
-        - [ ] 현재 `positions` 딕셔너리를 `live_positions.json` 파일에 JSON 형식으로 저장.
-    - [ ] `load_positions() -> dict` 함수 구현:
-        - [ ] `live_positions.json` 파일이 존재하면, 파일 내용을 읽어와 파이썬 딕셔너리로 변환하여 반환.
-        - [ ] 파일이 없으면, 빈 딕셔너리 반환.
+## 3) 품질/구조/CI (Day 3)
 
-## 4. 실행 계층: 메인 루프 리팩토링
+- [ ] `pyproject.toml` 품질 도구 설정
+    - [ ] Ruff/pytest 설정 추가 및 dev-deps 정리
+    - [ ] 스크립트 추가: `lint`, `test`, `run-trader`
+- [ ] CI 파이프라인
+    - [ ] GitHub Actions 워크플로우: ruff + pytest
+- [ ] 문서/환경
+    - [ ] `README.md` 업데이트: 아키텍처/환경 변수/실행 방법
+    - [ ] `.env.sample` 배포
 
-- [ ] **`live_trader_gpt.py` (또는 `main.py`) 리팩토링:**
-    - [ ] **초기화 로직:**
-        - [ ] 스크립트 시작 시, `state_manager.load_positions()`를 호출하여 `positions` 딕셔너리 초기화.
-    - [ ] **메인 루프 수정:**
-        - [ ] **데이터 수집:** 루프 시작 시, 각 심볼과 타임프레임에 대해 `data_provider.get_klines()`를 호출하여 최신 데이터를 가져옴.
-        - [ ] **신호 계산:** `strategy.calculate_aggregate_signal()`에 수집된 데이터를 전달하여 거래 점수(score) 획득.
-        - [ ] **포지션 규모 계산 (ATR):**
-            - [ ] `position_sizer.py` 모듈 활용 고려.
-            - [ ] ATR 계산 시, 실행 타임프레임(e.g., '5m')의 '마감된' 캔들(`iloc[-2]`)을 사용하여 Repainting 방지.
-        - [ ] **주문 실행 및 상태 저장:**
-            - [ ] `place_market_buy` 또는 `place_market_sell_all` 함수 실행 **직후**, `state_manager.save_positions(positions)`를 즉시 호출하여 최신 상태를 파일에 저장.
-    - [ ] **오류 처리 및 로깅 개선:** 각 계층(데이터, 전략, 실행)에서 발생하는 예외를 명확히 구분하여 로깅.
+## 주석
+- 컬럼 네이밍은 `Open/High/Low/Close/Volume`(Title case)로 표준화합니다.
+- 전략은 신호만 판정하고, 포지션 CRUD는 트레이더/상태관리자가 담당합니다.
