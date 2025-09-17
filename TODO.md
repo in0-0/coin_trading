@@ -83,3 +83,27 @@
     - [ ] 통합: 부분체결 2회 집계, 타임아웃 후 상태조회, 재시도 성공 시 단일 체결 보장
 - [x] 문서 업데이트: `README.md`에 실거래/시뮬레이션 모드 설명과 주의 사항 추가
     - [x] TESTNET 우선 검증 플로우, 보호 장치 설명, 실행 예시 및 경고 문구
+
+## 5) 복합 전략(Composite Signal + Kelly Sizing)
+
+- [ ] 설계 확정 및 파라미터 기본값 정의(가중치, 임계치, 기간, MaxScore)
+- [ ] TDD: 실패 테스트 작성 및 잠금(.cursorignore 유지)
+    - [ ] [tests/test_composite_strategy.py](mdc:tests/test_composite_strategy.py): 각 F_i ∈ [-1,1], S 클리핑, 임계치 교차 시 BUY/SELL/HOLD, `dropna()` 후 폐봉만 사용
+    - [ ] [tests/test_position_sizer.py](mdc:tests/test_position_sizer.py): Kelly 계산식/클램프 검증, 점수↑ → 포지션 단조 증가
+    - [ ] [tests/test_risk_manager.py](mdc:tests/test_risk_manager.py): ATR·k_sl·rr로 브래킷(SL/TP) 정확성(롱/숏 대칭)
+    - [ ] [tests/test_live_trader_composite.py](mdc:tests/test_live_trader_composite.py): 전략 점수→사이징→브래킷→주문 플로우(모킹) 통합 검증
+- [ ] 전략/사이징/리스크 모듈 구현
+    - [ ] [strategies/composite_signal_strategy.py](mdc:strategies/composite_signal_strategy.py): EMA/BB/RSI/MACD/Volume/OBV로 점수 S 계산, `score()`/`get_signal()` 구현(순수, 외부 상태 불변)
+    - [ ] [strategy_factory.py](mdc:strategy_factory.py): "composite_signal" 등록 및 기본 설정 주입
+    - [ ] [trader/position_sizer.py](mdc:trader/position_sizer.py): `kelly_position_size(capital, win_rate, avg_win, avg_loss, score, max_score, clamps)` 추가
+    - [ ] [trader/risk_manager.py](mdc:trader/risk_manager.py) 신규: `compute_initial_bracket(entry, atr, side, k_sl, rr)` 구현
+    - [ ] [live_trader_gpt.py](mdc:live_trader_gpt.py): 점수 산출→Kelly×Confidence로 수량 결정→ATR 기반 브래킷 계산→주문 전달 연결
+    - [ ] [trader/symbol_rules.py](mdc:trader/symbol_rules.py): 심볼별 가중치/임계치/기간 오버라이드(선택)
+- [ ] 백테스트/검증
+    - [ ] 폐봉 기준 루프(df[:i+1])로 룩어헤드 방지, 수수료/슬리피지 반영
+    - [ ] 성과지표 집계(p, b, 평균손익)로 Kelly 입력값 갱신, `backtest_logs/` 기록
+- [ ] 로깅/관찰성
+    - [ ] 점수 S, Kelly f*, Confidence, 최종 Pos, ATR, SL/TP를 체결 로그에 포함
+- [ ] 문서/런북
+    - [ ] [README.md](mdc:README.md) 갱신: 전략 개요/파라미터/사용 방법
+    - [ ] 실행 예시 및 보호장치 주의사항 추가
