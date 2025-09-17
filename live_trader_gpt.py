@@ -14,17 +14,13 @@ Key Improvements:
 
 import os
 import time
-import math
 import signal
 import logging
-from datetime import datetime
 from typing import Dict, Optional
 
 import requests
 import pandas as pd
 from binance.client import Client
-from binance.exceptions import BinanceAPIException, BinanceOrderException
-from requests.exceptions import ReadTimeout, ConnectionError
 from dotenv import load_dotenv
 
 # --- Import Refactored Modules ---
@@ -32,6 +28,7 @@ from binance_data import BinanceData
 from strategy_factory import StrategyFactory
 from state_manager import StateManager
 from models import Position, Signal
+from trader import Notifier, PositionSizer, TradeExecutor
 
 load_dotenv()
 
@@ -68,6 +65,13 @@ class LiveTrader:
         self._setup_client()
         self.data_provider = BinanceData(self.api_key, self.api_secret)
         self.state_manager = StateManager("live_positions.json")
+        self.notifier = Notifier(TG_BOT_TOKEN, TG_CHAT_ID)
+        self.position_sizer = PositionSizer(
+            risk_per_trade=RISK_PER_TRADE,
+            max_symbol_weight=MAX_SYMBOL_WEIGHT,
+            min_order_usdt=MIN_ORDER_USDT,
+        )
+        self.executor = TradeExecutor(self.client, self.data_provider, self.state_manager, self.notifier)
         self.strategies = {
             symbol: self._setup_strategy(symbol) for symbol in SYMBOLS
         }
@@ -127,7 +131,7 @@ class LiveTrader:
                 logging.exception(f"Error checking stop for {sym}: {e}")
 
     def _find_and_execute_entries(self):
-        usdt_bal = self._get_account_balance_usdt()
+        usdt_bal = self.executor.get_usdt_balance()
         if usdt_bal <= MIN_ORDER_USDT:
             return
 
@@ -152,74 +156,26 @@ class LiveTrader:
     
 
     def _calculate_position_size(self, symbol: str, usdt_balance: float, market_data: pd.DataFrame) -> Optional[float]:
-        price = market_data['Close'].iloc[-1]
-        risk_usdt = usdt_balance * RISK_PER_TRADE
-        
-        # Simplified position sizing
-        spend = risk_usdt * 10  # Example: leverage or larger position size
-        
-        max_alloc = usdt_balance * MAX_SYMBOL_WEIGHT
-        spend = min(spend, max_alloc, usdt_balance * 0.95)
-        
-        return spend if spend >= MIN_ORDER_USDT else None
+        return self.position_sizer.compute_spend_amount(usdt_balance, market_data)
 
     def _place_buy_order(self, symbol: str, usdt_to_spend: float):
-        try:
-            price = self.data_provider.get_current_price(symbol)
-            if price <= 0: return
-            
-            qty = usdt_to_spend / price
-            logging.info(f"Executing market BUY for {symbol}, qty ~{qty:.6f}")
-
-            # Create Position on BUY with stop_price set using ATR trailing rule
-            current_df = self.data_provider.get_and_update_klines(symbol, EXECUTION_TIMEFRAME)
-            latest_close = float(current_df['Close'].iloc[-1])
-            # Conservative ATR calc for stop; if atr not present, fallback
-            atr = float(current_df['atr'].iloc[-1]) if 'atr' in current_df.columns else latest_close * 0.02
-            stop_price = float(max(0.0, latest_close - atr * ATR_MULTIPLIER))
-            qty = usdt_to_spend / price
-            position = Position(symbol=symbol, qty=qty, entry_price=latest_close, stop_price=stop_price)
-
-            self.positions[symbol] = position
-            self.state_manager.save_positions(self.positions)
-            self.tg_send(f"✅ BUY {symbol} @ ${position.entry_price:.4f}\nQty: {qty:.6f}\nStop: ${position.stop_price:.4f}")
-        except Exception as e:
-            logging.exception(f"Failed to place BUY order for {symbol}: {e}")
-            self.tg_send(f"❌ BUY FAILED for {symbol}: {e}")
+        # Delegate to executor which manages position persistence and notifications
+        self.executor.market_buy(
+            symbol=symbol,
+            usdt_to_spend=usdt_to_spend,
+            positions=self.positions,
+            atr_multiplier=ATR_MULTIPLIER,
+            timeframe=EXECUTION_TIMEFRAME,
+        )
 
     def _place_sell_order(self, symbol: str):
-        pos = self.positions.get(symbol)
-        if not pos: return
-        try:
-            # Note: In a real scenario, use client.create_order
-            price = self.data_provider.get_current_price(symbol)
-            logging.info(f"Executing market SELL for {symbol}, qty {pos.qty:.6f}")
-            
-            del self.positions[symbol]
-            self.state_manager.save_positions(self.positions)
-            pnl = (price - pos.entry_price) * pos.qty
-            self.tg_send(f"🛑 SELL {symbol} @ ${price:.4f}\nPnL: ${pnl:.2f}")
-        except Exception as e:
-            logging.exception(f"Failed to place SELL order for {symbol}: {e}")
-            self.tg_send(f"❌ SELL FAILED for {symbol}: {e}")
+        self.executor.market_sell(symbol, self.positions)
 
     def _get_account_balance_usdt(self) -> float:
-        try:
-            info = self.client.get_account()
-            for bal in info['balances']:
-                if bal['asset'] == 'USDT':
-                    return float(bal['free'])
-        except Exception:
-            return 0.0
-        return 0.0
+        return self.executor.get_usdt_balance()
 
     def tg_send(self, msg: str):
-        if not TG_BOT_TOKEN or not TG_CHAT_ID: return
-        try:
-            requests.post(f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage",
-                          json={"chat_id": TG_CHAT_ID, "text": msg, "parse_mode": "Markdown"})
-        except Exception as e:
-            logging.warning(f"Telegram send error: {e}")
+        self.notifier.send(msg)
 
     def stop(self):
         self._running = False

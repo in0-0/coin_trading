@@ -1,0 +1,32 @@
+---
+alwaysApply: true
+description: Project structure, entrypoints, and commands for coin_trading
+---
+
+# Project Structure and Entry Points
+
+- Main live trading entrypoint: [live_trader_gpt.py](mdc:live_trader_gpt.py)
+- Data provider (klines persistence under `data/`): [binance_data.py](mdc:binance_data.py)
+- Data providers (Strategy Pattern for fetching klines): [data_providers/](mdc:data_providers/) with base [base.py](mdc:data_providers/base.py) and default Binance implementation [binance_klines_strategy.py](mdc:data_providers/binance_klines_strategy.py)
+- Strategies (Strategy Pattern): directory [strategies/](mdc:strategies/) with base interface [base_strategy.py](mdc:strategies/base_strategy.py) and ATR trailing stop strategy [atr_trailing_stop_strategy.py](mdc:strategies/atr_trailing_stop_strategy.py)
+- Strategy factory: [strategy_factory.py](mdc:strategy_factory.py)
+- Models (`Signal` enum, `Position`): [models.py](mdc:models.py)
+- Persistent bot state (positions JSON): [state_manager.py](mdc:state_manager.py)
+- Trader components (composition used by LiveTrader): [trader/](mdc:trader/) with [notifier.py](mdc:trader/notifier.py), [position_sizer.py](mdc:trader/position_sizer.py), [trade_executor.py](mdc:trader/trade_executor.py)
+- Tests (pytest): [tests/](mdc:tests/)
+- Docs and setup: [README.md](mdc:README.md), project scripts in [pyproject.toml](mdc:pyproject.toml)
+- Backtest outputs (CSV/logs): [backtest_logs/](mdc:backtest_logs/)
+
+## Commands (via uv)
+
+- Lint: `uv run ruff check .`
+- Lint (fix): `uv run ruff check --fix .`
+- Test: `uv run pytest -q`
+- Run trader: `uv run python live_trader_gpt.py`
+
+## Implementation Guidance
+
+- Keep modules cohesive: CSV persistence in `binance_data.py`, data fetching in `data_providers/` strategies, signal generation in `strategies/`, execution/state in the trader.
+- Use environment variables per [README.md](mdc:README.md) for keys and runtime config.
+- Maintain Title Case OHLCV columns throughout the pipeline: `Open time`, `Open`, `High`, `Low`, `Close`, `Volume`.
+- Prefer type hints, clear naming, and robust logging. Enforce style with Ruff and validate with pytest in CI.

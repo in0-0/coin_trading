@@ -1,0 +1,58 @@
+---
+description: How to backtest ATRTrailingStopStrategy with real Binance data using existing modules
+---
+
+# Backtesting Guide
+
+This guide shows how to backtest the live ATR trailing stop strategy with real data.
+
+## Components
+
+- Data: [binance_data.py](mdc:binance_data.py) → `get_and_update_klines(symbol, interval, initial_load_days)` saves/returns Title Case OHLCV.
+- Strategy: [strategies/atr_trailing_stop_strategy.py](mdc:strategies/atr_trailing_stop_strategy.py) via [strategy_factory.py](mdc:strategy_factory.py).
+ - Strategy: [strategies/atr_trailing_stop_strategy.py](mdc:strategies/atr_trailing_stop_strategy.py) via [strategy_factory.py](mdc:strategy_factory.py).
+ - Optional parity: mirror live sizing by reusing logic from [trader/position_sizer.py](mdc:trader/position_sizer.py).
+- Models: [models.py](mdc:models.py) `Signal`, `Position`.
+
+## Rules
+
+- Use only CLOSED candles; avoid lookahead.
+- Compute ATR/RSI once per run and `dropna()` before looping.
+- Strategy returns `Signal` only; update trailing stops and positions in the engine.
+- Size entries similar to live trader logic to keep behavior aligned.
+
+## Minimal Loop (pseudocode)
+
+```python
+from binance_data import BinanceData
+from strategy_factory import StrategyFactory
+from models import Position, Signal
+import pandas_ta as ta
+
+bd = BinanceData(api_key, secret)
+df = bd.get_and_update_klines("BTCUSDT", "5m", initial_load_days=180)
+
+# indicators once
+df["atr"] = ta.atr(df["High"], df["Low"], df["Close"])
+df["rsi"] = ta.rsi(df["Close"]).dropna()
+
+factory = StrategyFactory()
+strat = factory.create_strategy(
+    "atr_trailing_stop", symbol="BTCUSDT", atr_multiplier=0.5, risk_per_trade=0.005
+)
+
+position = None
+cash = 10_000
+for i in range(len(df)):
+    window = df.iloc[: i + 1]
+    row = df.iloc[i]
+    signal = strat.get_signal(window.copy(), position)
+
+    # manage trailing stop and exits here (engine responsibility)
+    # open on BUY with stop = close - atr*multiplier, ratchet stop upwards while holding
+```
+
+## Runbook
+
+- Fetch/sync data and run your backtest engine. Save outputs to `backtest_logs/` for inspection.
+- Use `uv run pytest -q` to validate strategy behavior; add engine-level tests for stop/exit paths.

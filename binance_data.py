@@ -1,26 +1,39 @@
 import os
 import logging
+from datetime import datetime, timedelta
+from typing import Optional, Final, List
+
 import pandas as pd
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
-from datetime import datetime, timedelta
+
+from data_providers.base import KlinesFetchStrategy
+from data_providers.binance_klines_strategy import BinanceKlinesFetchStrategy
 
 # 컬럼 이름을 상수로 정의하여 오타 방지 및 가독성 향상
-KLINE_COLUMNS = [
+KLINE_COLUMNS: Final[List[str]] = [
     "Open time", "Open", "High", "Low", "Close", "Volume", "Close time",
     "Quote asset volume", "Number of trades", "Taker buy base asset volume",
     "Taker buy quote asset volume", "Ignore"
 ]
-TARGET_COLUMNS = ["Open time", "Open", "High", "Low", "Close", "Volume"]
-NUMERIC_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
+TARGET_COLUMNS: Final[List[str]] = ["Open time", "Open", "High", "Low", "Close", "Volume"]
+NUMERIC_COLUMNS: Final[List[str]] = ["Open", "High", "Low", "Close", "Volume"]
 
 class BinanceData:
-    def __init__(self, api_key, secret_key, data_dir="data/"):
+    def __init__(self, api_key, secret_key, data_dir="data/", fetch_strategy: Optional[KlinesFetchStrategy] = None):
+        """
+        Data provider that persists Binance klines to CSV files.
+
+        Uses a pluggable strategy to fetch klines so that different
+        data sources or fetching behaviors can be injected without
+        changing persistence or data contract logic.
+        """
         self.client = Client(api_key, secret_key)
         self.data_dir = data_dir
+        self.fetch_strategy: KlinesFetchStrategy = fetch_strategy or BinanceKlinesFetchStrategy()
         os.makedirs(self.data_dir, exist_ok=True)
 
-    def get_and_update_klines(self, symbol, interval, initial_load_days=30):
+    def get_and_update_klines(self, symbol: str, interval: str, initial_load_days: int = 30) -> pd.DataFrame:
         """
         Fetch klines incrementally and persist to CSV. Always return Title-cased TARGET_COLUMNS
         with correct dtypes: "Open time" as datetime64[ns], numeric columns as float.
@@ -33,18 +46,18 @@ class BinanceData:
         try:
             if start_timestamp is None:
                 start_str = (datetime.utcnow() - timedelta(days=initial_load_days)).strftime("%Y-%m-%d %H:%M:%S")
-                klines = self.client.get_historical_klines(symbol, interval, start_str)
+                klines = self.fetch_strategy.fetch_initial(self.client, symbol, interval, start_str)
             else:
-                klines = self.client.get_klines(symbol=symbol, interval=interval, startTime=start_timestamp)
+                klines = self.fetch_strategy.fetch_incremental(self.client, symbol, interval, start_timestamp)
         except BinanceAPIException as e:
             logging.error(f"Failed to fetch klines for {symbol} {interval}: {e}")
-            return df_existing[TARGET_COLUMNS] if df_existing is not None else pd.DataFrame(columns=TARGET_COLUMNS)
+            return df_existing.loc[:, TARGET_COLUMNS] if df_existing is not None else pd.DataFrame(columns=pd.Index(TARGET_COLUMNS))
 
         if not klines:
             logging.warning(f"No new klines returned for {symbol} {interval}.")
-            return df_existing[TARGET_COLUMNS] if df_existing is not None else pd.DataFrame(columns=TARGET_COLUMNS)
+            return df_existing.loc[:, TARGET_COLUMNS] if df_existing is not None else pd.DataFrame(columns=pd.Index(TARGET_COLUMNS))
 
-        df_new = pd.DataFrame(klines, columns=KLINE_COLUMNS)
+        df_new = pd.DataFrame(klines, columns=pd.Index(KLINE_COLUMNS))
         # Normalize types
         df_new["Open time"] = pd.to_datetime(df_new["Open time"], unit="ms", errors="coerce")
         for col in NUMERIC_COLUMNS:
@@ -63,9 +76,9 @@ class BinanceData:
         df_combined.to_csv(file_path, index=False)
 
         # Return standardized view
-        return df_combined[TARGET_COLUMNS]
+        return df_combined.loc[:, TARGET_COLUMNS]
 
-    def _load_existing_data(self, file_path):
+    def _load_existing_data(self, file_path: str) -> Optional[pd.DataFrame]:
         if not os.path.exists(file_path):
             return None
         try:
@@ -87,7 +100,7 @@ class BinanceData:
             logging.warning(f"Existing data not loaded from {file_path}: {e}")
             return None
 
-    def _get_start_timestamp(self, df):
+    def _get_start_timestamp(self, df: Optional[pd.DataFrame]) -> Optional[int]:
         if df is None or df.empty:
             return None
         last_open_time = df["Open time"].dropna().iloc[-1]
