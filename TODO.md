@@ -37,15 +37,27 @@
 
 ## 3) 품질/구조/CI (Day 3)
 
-- [ ] `pyproject.toml` 품질 도구 설정
-    - [ ] Ruff/pytest 설정 추가 및 dev-deps 정리
-    - [ ] 스크립트 추가: `lint`, `test`, `run-trader`
-- [ ] CI 파이프라인
-    - [ ] GitHub Actions 워크플로우: ruff + pytest
-- [ ] 문서/환경
-    - [ ] `README.md` 업데이트: 아키텍처/환경 변수/실행 방법
-    - [ ] `.env.sample` 배포
+- [x] `pyproject.toml` 품질 도구 설정
+    - [x] Ruff/pytest 설정 추가 및 dev-deps 정리
+    - [x] 스크립트 추가: `lint`, `test`, `run-trader`
+- [x] CI 파이프라인
+    - [x] GitHub Actions 워크플로우: ruff + pytest
+- [x] 문서/환경
+    - [x] `README.md` 업데이트: 아키텍처/환경 변수/실행 방법
+    - [x] `.env.sample` 배포
 
 ## 주석
 - 컬럼 네이밍은 `Open/High/Low/Close/Volume`(Title case)로 표준화합니다.
 - 전략은 신호만 판정하고, 포지션 CRUD는 트레이더/상태관리자가 담당합니다.
+
+## 4) 실거래 주문 실행 (Enable Live Orders)
+
+- [ ] 주문 실행 플래그/모드 추가 (`ORDER_EXECUTION`: `SIMULATED`/`LIVE`) 및 기본 `SIMULATED`
+- [ ] `_place_buy_order`/`_place_sell_order`에 `client.create_order(...)` 연동 (MARKET 우선)
+- [ ] 심볼 거래 규칙 검증: LOT_SIZE, MIN_NOTIONAL, PRICE_FILTER 적용 및 수량/가격 라운딩
+- [ ] 주문 예외 처리 강화: 타임아웃/재시도(backoff), idempotency 키, 네트워크 에러 복구
+- [ ] 주문/체결 추적: `orderId`, 상태 조회, 평균 체결가/수수료 반영, 부분체결 처리
+- [ ] 슬리피지/체결 안전장치: 최대 허용 슬리피지, 최소 체결 금액, 킬스위치 환경변수
+- [ ] 실시간 잔고/포지션 동기화: 체결 후 잔고 갱신, 수수료 고려한 수량 계산
+- [ ] 통합 테스트: `Client.create_order` 모킹으로 엔트리/청산 플로우 검증, 규칙 위반 케이스 포함
+- [ ] 문서 업데이트: `README.md`에 실거래/시뮬레이션 모드 설명과 주의 사항 추가

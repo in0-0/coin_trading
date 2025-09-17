@@ -1,0 +1,34 @@
+---
+alwaysApply: true
+description: Kline data schema, indicator computation rules, and no-lookahead policy
+---
+
+# Data Contracts and Signal Rules
+
+## Kline Schema (produced by [binance_data.py](mdc:binance_data.py))
+
+- KLINE_COLUMNS (raw): `Open time`, `Open`, `High`, `Low`, `Close`, `Volume`, `Close time`, `Quote asset volume`, `Number of trades`, `Taker buy base asset volume`, `Taker buy quote asset volume`, `Ignore`
+- TARGET_COLUMNS (returned and persisted): `Open time`, `Open`, `High`, `Low`, `Close`, `Volume`
+- Dtypes:
+  - `Open time`: pandas datetime64[ns]
+  - `Open`, `High`, `Low`, `Close`, `Volume`: numeric (float)
+- Files are saved to `data/{SYMBOL}_{INTERVAL}.csv` and deduplicated by `Open time`.
+
+## Indicators and No-Lookahead
+
+- Indicators (ATR, RSI) are computed with `pandas_ta` inside strategies or upstream; always call `dropna()` before using signals.
+- Use only CLOSED candles when generating signals. When iterating, pass a window up to the current index (inclusive) to the strategy.
+- Strategy classes (e.g. [atr_trailing_stop_strategy.py](mdc:strategies/atr_trailing_stop_strategy.py)) must be pure: they return a `Signal` and must not mutate external state.
+- Trailing stop updates and position/state mutations are handled by the trader/backtest engine, not inside the strategy.
+
+## Data Providers (Strategy for fetching klines)
+
+- Klines fetching is abstracted behind `data_providers/` strategies.
+- Default: `data_providers/binance_klines_strategy.py` using official Binance client.
+- `binance_data.BinanceData` injects a `KlinesFetchStrategy`; persistence and contracts remain unchanged.
+
+## Position and Signal Models
+
+- `Signal` enum and `Position` model live in [models.py](mdc:models.py).
+- Live trader behavior and state persistence are exemplified in [live_trader_gpt.py](mdc:live_trader_gpt.py) and [state_manager.py](mdc:state_manager.py).
+ - Live trader composition uses `trader/` components ([notifier.py](mdc:trader/notifier.py), [position_sizer.py](mdc:trader/position_sizer.py), [trade_executor.py](mdc:trader/trade_executor.py)) with orchestration in [live_trader_gpt.py](mdc:live_trader_gpt.py).
