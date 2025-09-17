@@ -46,6 +46,8 @@
     - [x] `README.md` 업데이트: 아키텍처/환경 변수/실행 방법
     - [x] `.env.sample` 배포
 
+- [x] Cursor 규칙: pytest-first TDD 규칙 추가 및 테스트 잠금 ([.cursor/rules/pytest-first-tdd.mdc](mdc:.cursor/rules/pytest-first-tdd.mdc), [.cursorignore](mdc:.cursorignore))
+
 ## 주석
 - 컬럼 네이밍은 `Open/High/Low/Close/Volume`(Title case)로 표준화합니다.
 - 전략은 신호만 판정하고, 포지션 CRUD는 트레이더/상태관리자가 담당합니다.

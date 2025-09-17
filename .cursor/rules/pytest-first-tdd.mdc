@@ -1,0 +1,40 @@
+---
+alwaysApply: true
+---
+
+# Pytest-First TDD Rule (Failing test → Root cause → Lock tests)
+
+본 프로젝트의 모든 코드 변경은 다음 TDD 절차를 반드시 따른다. 이 규칙은 전 파일(globs 미지정) 에 항상 적용된다.
+
+- **1단계(실패하는 테스트 우선)**: 변경 또는 버그 수정 전에 반드시 실패하는 테스트를 먼저 작성한다. 테스트는 `pytest`로 실행되며 최소 재현 예제를 포함해야 한다. 관련 테스트 파일은 `tests/`에 위치시키고, 기존 케이스를 깨지 않도록 분리/명시한다.
+- **2단계(근본 원인 가설과 검증 방법 명시)**: 실패 테스트와 함께(혹은 바로 직후) 가능한 원인 가설과 이를 확인하는 방법을 테스트/코드 주석 또는 커밋 메시지에 간단히 기록한다. 한 줄이라도 좋으나, 재현 조건, 기대 동작, 실제 동작의 차이를 명확히 한다.
+- **3단계(테스트 잠금 후 구현)**: 재현 테스트를 `.cursorignore`에 잠금 규칙으로 추가해, 구현 중에 에디터 도구가 테스트 자동 수정/생성을 우회하지 않도록 한다. 그 후 테스트가 통과될 때까지 최소 수정으로 구현하고, 리팩터링은 그 다음 단계에서 진행한다.
+
+## 실행 가이드
+
+- 테스트 실행: `uv run pytest -q`
+- 린트: `uv run ruff check .`
+- 라이브 트레이더: `uv run python live_trader_gpt.py`
+
+## 데이터/전략 계약 상기
+
+- 클라인 컬럼 계약은 [binance_data.py](mdc:binance_data.py) 참조. `Open time`, `Open`, `High`, `Low`, `Close`, `Volume` 유지.
+- 인디케이터는 `dropna()` 후 사용. 신호는 닫힌 캔들만 사용. 전략은 순수 함수: [strategies/base_strategy.py](mdc:strategies/base_strategy.py), [strategies/atr_trailing_stop_strategy.py](mdc:strategies/atr_trailing_stop_strategy.py)
+- 라이브 트레이더 구성: [live_trader_gpt.py](mdc:live_trader_gpt.py), 상태: [state_manager.py](mdc:state_manager.py)
+
+## .cursorignore 테스트 잠금 규칙 예시
+
+`.cursorignore`에 다음과 같이 추가한다(이미 존재하면 중복 추가 금지).
+
+```
+# Lock failing tests during TDD until fixed
+!/tests/
+/tests/**
+```
+
+- 의도: 작업 중 보조 도구가 테스트 파일을 자동 편집/생성하지 못하도록 보호한다. 구현이 완료되어 테스트가 모두 통과하면 해당 잠금은 유지해도 무방하나, 필요 시 특정 케이스만 잠금 해제 가능.
+
+## 커밋/문서화 규칙(요약)
+
+- 커밋 메시지는 Conventional Commits 사용. 예: `test(models): reproduce ATR stop bug`, `fix(atr): handle trailing update on equal close`, `chore(todo): update TODO after TDD`.
+- 변경 직후 [TODO.md](mdc:TODO.md) 업데이트.
