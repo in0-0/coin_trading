@@ -8,11 +8,29 @@ from state_manager import StateManager
 
 
 class TradeExecutor:
-    def __init__(self, client: Client, data_provider, state_manager: StateManager, notifier):
+    def __init__(
+        self,
+        client: Client,
+        data_provider,
+        state_manager: StateManager,
+        notifier,
+        *,
+        execution_mode: str = "SIMULATED",
+        max_slippage_bps: int = 50,
+        order_timeout_sec: int = 10,
+        order_retry: int = 3,
+        kill_switch: bool = False,
+    ):
         self.client = client
         self.data_provider = data_provider
         self.state_manager = state_manager
         self.notifier = notifier
+        # Execution configuration (stored for future LIVE integration)
+        self.execution_mode = execution_mode.upper()
+        self.max_slippage_bps = max_slippage_bps
+        self.order_timeout_sec = order_timeout_sec
+        self.order_retry = order_retry
+        self.kill_switch = kill_switch
 
     def get_usdt_balance(self) -> float:
         try:
@@ -26,6 +44,18 @@ class TradeExecutor:
 
     def market_buy(self, symbol: str, usdt_to_spend: float, positions: Dict[str, Position], atr_multiplier: float, timeframe: str) -> None:
         try:
+            if getattr(self, "kill_switch", False) and getattr(self, "execution_mode", "SIMULATED") == "LIVE":
+                self.notifier.send("⛔ Kill switch active. Skipping LIVE BUY order.")
+                return
+
+            mode = getattr(self, "execution_mode", "SIMULATED")
+            if mode == "LIVE":
+                # Stub branch: actual LIVE order logic will be implemented in later task
+                # For now, do not place a real order; log intent for visibility.
+                logging.info("[LIVE-INTENT] BUY %s quoteOrderQty=%.2f (stub)", symbol, usdt_to_spend)
+                return
+
+            # SIMULATED branch (existing behavior)
             price = self.data_provider.get_current_price(symbol)
             if price <= 0:
                 return
@@ -49,6 +79,15 @@ class TradeExecutor:
         if not position:
             return
         try:
+            if getattr(self, "kill_switch", False) and getattr(self, "execution_mode", "SIMULATED") == "LIVE":
+                self.notifier.send("⛔ Kill switch active. Skipping LIVE SELL order.")
+                return
+
+            mode = getattr(self, "execution_mode", "SIMULATED")
+            if mode == "LIVE":
+                logging.info("[LIVE-INTENT] SELL %s qty=%.6f (stub)", symbol, position.qty)
+                return
+
             price = self.data_provider.get_current_price(symbol)
             del positions[symbol]
             self.state_manager.save_positions(positions)

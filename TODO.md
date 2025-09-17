@@ -52,12 +52,32 @@
 
 ## 4) 실거래 주문 실행 (Enable Live Orders)
 
-- [ ] 주문 실행 플래그/모드 추가 (`ORDER_EXECUTION`: `SIMULATED`/`LIVE`) 및 기본 `SIMULATED`
-- [ ] `_place_buy_order`/`_place_sell_order`에 `client.create_order(...)` 연동 (MARKET 우선)
-- [ ] 심볼 거래 규칙 검증: LOT_SIZE, MIN_NOTIONAL, PRICE_FILTER 적용 및 수량/가격 라운딩
-- [ ] 주문 예외 처리 강화: 타임아웃/재시도(backoff), idempotency 키, 네트워크 에러 복구
+- [x] 주문 실행 플래그/모드 추가 (`ORDER_EXECUTION`: `SIMULATED`/`LIVE`) 및 기본 `SIMULATED`
+    - [x] `.env.sample`(또는 `env.example`), `README.md`에 환경변수 항목 추가 (`ORDER_EXECUTION`, `MAX_SLIPPAGE_BPS`, `ORDER_TIMEOUT_SEC`, `ORDER_RETRY`, `ORDER_KILL_SWITCH`)
+    - [x] `live_trader_gpt.py`에서 환경변수 로드 및 `TradeExecutor`로 전달 (현재 executor 속성으로 보관)
+    - [x] 기본값: `ORDER_EXECUTION=SIMULATED`, `MAX_SLIPPAGE_BPS=50`, `ORDER_TIMEOUT_SEC=10`, `ORDER_RETRY=3`, `ORDER_KILL_SWITCH=false`
+- [x] `_place_buy_order`/`_place_sell_order`에 `client.create_order(...)` 연동 (MARKET 우선)
+    - [x] `TradeExecutor`에 `execution_mode` 분기 (LIVE 실제 호출 적용)
+    - [x] BUY: `quoteOrderQty` 사용, SELL: `quantity` 사용, 공통: `newOrderRespType='FULL'`
+    - [x] `newClientOrderId` 아이템포턴시 적용 (재시도 시 동일 ID)
+- [x] 심볼 거래 규칙 검증: LOT_SIZE, MIN_NOTIONAL, PRICE_FILTER 적용 및 수량/가격 라운딩 (헬퍼 스캐폴드 추가)
+    - [x] `get_symbol_info(symbol)` 캐시, `LOT_SIZE.stepSize/minQty`, `MIN_NOTIONAL.minNotional`, `PRICE_FILTER.tickSize` 파싱 (`trader/symbol_rules.py`)
+    - [x] `round_qty_to_step(qty, step)`, `validate_min_notional(price, qty, min_notional)`, `round_price_to_tick(price, tick)` 헬퍼 구현
+- [x] 주문 예외 처리 강화: 타임아웃/재시도(backoff), idempotency 키, 네트워크 에러 복구
+    - [x] 재시도 래퍼: 지수 백오프(+지터), `ORDER_RETRY`/`ORDER_TIMEOUT_SEC` 적용
+    - [x] 실패 시 최근 주문 조회(`get_all_orders` 스캔)로 상태 확인/idempotency 보강
 - [ ] 주문/체결 추적: `orderId`, 상태 조회, 평균 체결가/수수료 반영, 부분체결 처리
-- [ ] 슬리피지/체결 안전장치: 최대 허용 슬리피지, 최소 체결 금액, 킬스위치 환경변수
-- [ ] 실시간 잔고/포지션 동기화: 체결 후 잔고 갱신, 수수료 고려한 수량 계산
+    - [x] `FULL` 응답 기반 평균가/체결수량/수수료 집계
+    - [ ] 미완료 시 상태 폴링 후 집계 (추가 예정)
+    - [x] 알림/로그에 `orderId`, 평균가, 체결수량, 수수료 포함
+- [x] 슬리피지/체결 안전장치: 최대 허용 슬리피지, 최소 체결 금액, 킬스위치 환경변수
+    - [x] 사전 가드: `get_orderbook_ticker` 스프레드/추정 슬리피지 > `MAX_SLIPPAGE_BPS`면 주문 차단
+    - [x] `ORDER_KILL_SWITCH=true` 시 모든 LIVE 주문 차단 및 경고 알림 (현재 구현: LIVE 분기에서 즉시 차단)
+- [x] 실시간 잔고/포지션 동기화: 체결 후 잔고 갱신, 수수료 고려한 수량 계산
+    - [x] BUY: 실제 체결 수량/평균가로 `Position` 저장, 초기 `stop_price`는 ATR 기반 산출
+    - [x] SELL: 실제 평균가/수수료 포함 PnL 계산, 포지션 제거/저장
 - [ ] 통합 테스트: `Client.create_order` 모킹으로 엔트리/청산 플로우 검증, 규칙 위반 케이스 포함
-- [ ] 문서 업데이트: `README.md`에 실거래/시뮬레이션 모드 설명과 주의 사항 추가
+    - [ ] 유닛: 수량 라운딩/최소 주문금액/슬리피지 가드/아이템포턴시
+    - [ ] 통합: 부분체결 2회 집계, 타임아웃 후 상태조회, 재시도 성공 시 단일 체결 보장
+- [x] 문서 업데이트: `README.md`에 실거래/시뮬레이션 모드 설명과 주의 사항 추가
+    - [x] TESTNET 우선 검증 플로우, 보호 장치 설명, 실행 예시 및 경고 문구

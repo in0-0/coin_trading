@@ -50,6 +50,7 @@ The project uses the following design patterns:
 -   **BINANCE_API_KEY**, **BINANCE_SECRET_KEY**
 -   **TELEGRAM_BOT_TOKEN**, **TELEGRAM_CHAT_ID** (optional)
 -   **SYMBOLS** (comma-separated), **EXEC_INTERVAL_SECONDS**, **LOG_FILE**
+ -   Execution (orders): **ORDER_EXECUTION** (`SIMULATED`|`LIVE`, default `SIMULATED`), **MAX_SLIPPAGE_BPS** (default `50`), **ORDER_TIMEOUT_SEC** (default `10`), **ORDER_RETRY** (default `3`), **ORDER_KILL_SWITCH** (`true`/`false`, default `false`)
 
 ## Commands
 
@@ -83,6 +84,12 @@ LOG_FILE=live_trader.log
 # Optional
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+# Order execution (optional; default is safe SIMULATED)
+ORDER_EXECUTION=SIMULATED
+MAX_SLIPPAGE_BPS=50
+ORDER_TIMEOUT_SEC=10
+ORDER_RETRY=3
+ORDER_KILL_SWITCH=false
 ```
 
 ### REAL 실행
@@ -108,12 +115,22 @@ LOG_FILE=live_trader.log
 # Optional
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+# Order execution (recommend keeping SIMULATED until fully verified)
+ORDER_EXECUTION=SIMULATED
+MAX_SLIPPAGE_BPS=50
+ORDER_TIMEOUT_SEC=10
+ORDER_RETRY=3
+ORDER_KILL_SWITCH=false
 ```
 
 ### 동작 메모
 - 현재 버전은 매수/매도 시 실제 주문 API를 호출하지 않고 포지션만 로컬에 기록합니다. 실체결 활성화는 `TODO.md`의 "실거래 주문 실행" 항목을 완료해야 합니다.
 - TESTNET 모드에서는 테스트넷 REST URL(`https://testnet.binance.vision/api`)을 사용합니다.
 - 안전 종료: Ctrl+C → 모든 보유 포지션을 로컬 상태에서 정리하고 종료합니다.
+
+### 주문 실행 모드
+- `ORDER_EXECUTION=SIMULATED` (기본): 현재와 동일한 시뮬레이션 기록만 수행
+- `ORDER_EXECUTION=LIVE`: 실제 Binance 주문 API를 호출할 준비를 합니다. 본 저장소는 순차 작업으로 점진적으로 라이브 주문 로직을 추가합니다. `ORDER_KILL_SWITCH=true`이면 모든 LIVE 주문이 차단됩니다.
 
 ## CI
 

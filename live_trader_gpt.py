@@ -53,6 +53,13 @@ LOG_FILE = os.getenv("LOG_FILE", "live_trader.log")
 TG_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TG_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+# Order execution and safety guards
+ORDER_EXECUTION = os.getenv("ORDER_EXECUTION", "SIMULATED").upper()
+MAX_SLIPPAGE_BPS = int(os.getenv("MAX_SLIPPAGE_BPS", "50"))
+ORDER_TIMEOUT_SEC = int(os.getenv("ORDER_TIMEOUT_SEC", "10"))
+ORDER_RETRY = int(os.getenv("ORDER_RETRY", "3"))
+ORDER_KILL_SWITCH = os.getenv("ORDER_KILL_SWITCH", "false").lower() == "true"
+
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(message)s",
                     handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()])
@@ -71,7 +78,18 @@ class LiveTrader:
             max_symbol_weight=MAX_SYMBOL_WEIGHT,
             min_order_usdt=MIN_ORDER_USDT,
         )
-        self.executor = TradeExecutor(self.client, self.data_provider, self.state_manager, self.notifier)
+        self.executor = TradeExecutor(
+            self.client,
+            self.data_provider,
+            self.state_manager,
+            self.notifier,
+        )
+        # Propagate execution configuration (kept on executor for future LIVE mode)
+        self.executor.execution_mode = ORDER_EXECUTION
+        self.executor.max_slippage_bps = MAX_SLIPPAGE_BPS
+        self.executor.order_timeout_sec = ORDER_TIMEOUT_SEC
+        self.executor.order_retry = ORDER_RETRY
+        self.executor.kill_switch = ORDER_KILL_SWITCH
         self.strategies = {
             symbol: self._setup_strategy(symbol) for symbol in SYMBOLS
         }

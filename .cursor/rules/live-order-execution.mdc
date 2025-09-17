@@ -1,0 +1,66 @@
+---
+alwaysApply: false
+description: backtesting-guide
+---
+# Live Order Execution Plan
+
+This rule summarizes how to enable live order execution while preserving current architecture and data contracts.
+
+## Scope
+- Modes: SIMULATED vs LIVE via `ORDER_EXECUTION` env var
+- Live MARKET orders using Binance client, applying trading rules and safety guards
+- Resilient error handling, retries, idempotency
+
+## Key Modules
+- `live_trader_gpt.py` — main orchestrator, reads env and wires dependencies
+- `trader/trade_executor.py` — execution logic (SIMULATED/LIVE switch)
+- `trader/position_sizer.py` — spend sizing
+- `models.py` — `Signal`, `Position`
+- `README.md` — run modes and env documentation
+
+## Contracts & Data
+- Klines schema and no-lookahead rules per [README.md](mdc:README.md) and `[binance_data.py](mdc:binance_data.py)`
+- Strategy purity: only returns `Signal`; state mutations handled by trader
+
+## Env Vars
+- `ORDER_EXECUTION`: `SIMULATED` | `LIVE` (default `SIMULATED`)
+- `MAX_SLIPPAGE_BPS`: default 50
+- `ORDER_TIMEOUT_SEC`: default 10
+- `ORDER_RETRY`: default 3
+- `ORDER_KILL_SWITCH`: default false
+
+## Implementation Notes
+1) `live_trader_gpt.py`
+- Read env vars above and pass to `TradeExecutor`.
+- Keep `_place_buy_order`/`_place_sell_order` delegating to executor.
+
+2) `trader/trade_executor.py`
+- Add `execution_mode`, slippage/retry/timeout/kill-switch params.
+- Cache and apply symbol filters from `get_symbol_info`:
+  - `LOT_SIZE.stepSize/minQty`, `MIN_NOTIONAL.minNotional`, `PRICE_FILTER.tickSize`.
+- Helpers: `round_qty`, `validate_min_notional`, `tick_round_price`.
+- Retry wrapper with backoff and jitter; reuse `newClientOrderId` during retries.
+- Slippage guard: use `get_orderbook_ticker` to estimate; block if > `MAX_SLIPPAGE_BPS`.
+- LIVE buy: `create_order(..., side='BUY', type='MARKET', quoteOrderQty=..., newOrderRespType='FULL')`.
+- LIVE sell: `create_order(..., side='SELL', type='MARKET', quantity=..., newOrderRespType='FULL')`.
+- Aggregate fills for average price, total qty, total fees; handle partial fills.
+- After fill: create/update `Position` with actual qty and avg fill price; compute stop via ATR.
+- Sell: compute PnL with fees; remove position.
+
+3) Optional `models.Position` extension
+- Optional fields: `order_id`, `client_order_id`, `fees`, `avg_fill_price` (backward compatible serialization).
+
+## Testing
+- Unit: qty rounding, min notional, slippage guard, idempotency, retries.
+- Integration (mocked client):
+  - BUY with 2 partial fills → aggregated position saved
+  - SELL with rounding and PnL
+  - SIMULATED mode regression
+
+## References
+- [live_trader_gpt.py](mdc:live_trader_gpt.py)
+- [trader/trade_executor.py](mdc:trader/trade_executor.py)
+- [trader/position_sizer.py](mdc:trader/position_sizer.py)
+- [models.py](mdc:models.py)
+- [README.md](mdc:README.md)
+- [TODO.md](mdc:TODO.md)
