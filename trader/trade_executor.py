@@ -108,6 +108,30 @@ class TradeExecutor:
         except Exception:
             return True
 
+    def _poll_order_until_done(self, symbol: str, initial_resp: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        try:
+            order_id = initial_resp.get("orderId")
+            client_order_id = initial_resp.get("clientOrderId") or initial_resp.get("origClientOrderId")
+            timeout_sec = max(1, getattr(self, "order_timeout_sec", 10))
+            deadline = time.time() + timeout_sec
+            last = initial_resp
+            while time.time() < deadline:
+                try:
+                    if order_id:
+                        last = self.client.get_order(symbol=symbol, orderId=order_id)
+                    elif client_order_id:
+                        last = self.client.get_order(symbol=symbol, origClientOrderId=client_order_id)
+                    else:
+                        break
+                    if str(last.get("status", "")).upper() == "FILLED":
+                        return last
+                except Exception:
+                    pass
+                time.sleep(0.5)
+            return last
+        except Exception:
+            return None
+
     def get_usdt_balance(self) -> float:
         try:
             info = self.client.get_account()
@@ -146,6 +170,12 @@ class TradeExecutor:
                 if not resp:
                     self.notifier.send(f"❌ LIVE BUY FAILED {symbol}: no response")
                     return
+
+                # If not fully filled, poll until filled or timeout
+                if str(resp.get("status", "")).upper() != "FILLED":
+                    polled = self._poll_order_until_done(symbol, resp)
+                    if polled:
+                        resp = polled
 
                 avg_price, executed_qty, total_fee, fee_asset = self._compute_fills(resp)
                 if executed_qty <= 0:
@@ -228,6 +258,12 @@ class TradeExecutor:
                 if not resp:
                     self.notifier.send(f"❌ LIVE SELL FAILED {symbol}: no response")
                     return
+
+                # If not fully filled, poll until filled or timeout
+                if str(resp.get("status", "")).upper() != "FILLED":
+                    polled = self._poll_order_until_done(symbol, resp)
+                    if polled:
+                        resp = polled
 
                 avg_price, executed_qty, total_fee, fee_asset = self._compute_fills(resp)
                 if executed_qty <= 0:
