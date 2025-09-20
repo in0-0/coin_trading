@@ -1,0 +1,218 @@
+# 완료된 작업 내역 (Completed TODOs)
+
+본 파일은 TODO.md에서 완료된 항목들을 분리한 것입니다. 완료된 작업들의 상세 내역을 기록합니다.
+
+## 1) 런타임 안정화 (Day 1) ✅
+
+- [x] `binance_data.py` 데이터 일관성/증분 업데이트 안정화
+    - [x] 기존 CSV 로드 시 컬럼 케이스 오타 수정 (`"Open time"` 파싱 라인 수정)
+    - [x] 숫자 컬럼 타입 강제(`Open/High/Low/Close/Volume`)
+    - [x] `get_and_update_klines(symbol, interval)` 반환 컬럼을 `TARGET_COLUMNS`로 일관화
+    - [x] 에러 로깅 및 빈 데이터 처리 보강
+- [x] `models.py` 포지션 모델 고도화
+    - [x] `Position`에 헬퍼 추가(`is_open()`, `is_long()`), 필드명 `stop_price`로 통일
+    - [x] 직렬화/역직렬화 로직 유지 및 타입 힌트 강화
+- [x] `state_manager.py` 심볼별 포지션 CRUD 추가
+    - [x] `get_position(symbol)`, `upsert_position(symbol, position|None)` 구현
+    - [x] 기존 `save_positions()/load_positions()`와 호환 유지
+- [x] 전략 인터페이스 통일
+    - [x] `strategies/base_strategy.py`: `get_signal(market_data, position) -> Signal`
+    - [x] `strategies/atr_trailing_stop_strategy.py`에서 `StateManager` 직접 접근 제거, 입력 `position` 기반 판정으로 수정
+    - [x] 컬럼 접근을 Title case(`Close/High/Low`)로 통일
+- [x] `live_trader_gpt.py` 실행 로직 정합성
+    - [x] 전략 호출 시 현재 포지션 전달: `strategy.get_signal(df, positions.get(sym))`
+    - [x] BUY 시 `Position` 생성 및 `stop_price` 사용, SELL 시 포지션 제거 및 저장
+    - [x] 메시지/로그에서 `stop_loss`→`stop_price` 용어 통일
+
+## 2) 테스트 정리 (Day 2) ✅
+
+- [x] 레거시/손상 테스트 정리
+    - [x] 삭제된 모듈 참조(`backtester.py`, `main.py`, `strategy.py`, `position_sizer.py`, `live_trader.py`) 테스트 폐기 또는 `_archive/tests`로 이동
+    - [x] 손상된 `tests/test_backtester.py` 정리(보관 또는 삭제)
+- [x] 신규 단위 테스트 작성/수정
+    - [x] `tests/test_binance_data.py`: `get_and_update_klines`와 타입/컬럼 보장 검증(Mock 클라이언트)
+    - [x] `tests/test_state_manager.py`: 심볼별 `get_position/upsert_position` 추가 검증
+    - [x] `tests/test_strategy.py`: ATR 전략 신호/컬럼 케이스 검증
+    - [x] `tests/test_live_trader.py`: Binance `Client` 모킹 후 엔트리/청산 플로우 검증
+
+## 3) 품질/구조/CI (Day 3) ✅
+
+- [x] `pyproject.toml` 품질 도구 설정
+    - [x] Ruff/pytest 설정 추가 및 dev-deps 정리
+    - [x] 스크립트 추가: `lint`, `test`, `run-trader`
+- [x] CI 파이프라인
+    - [x] GitHub Actions 워크플로우: ruff + pytest
+- [x] 문서/환경
+    - [x] `README.md` 업데이트: 아키텍처/환경 변수/실행 방법
+    - [x] `.env.sample` 배포
+- [x] Cursor 규칙: pytest-first TDD 규칙 추가 및 테스트 잠금 ([.cursor/rules/pytest-first-tdd.mdc](mdc:.cursor/rules/pytest-first-tdd.mdc), [.cursorignore](mdc:.cursorignore))
+
+## 4) 실거래 주문 실행 (Enable Live Orders) ✅
+
+- [x] 주문 실행 플래그/모드 추가 (`ORDER_EXECUTION`: `SIMULATED`/`LIVE`) 및 기본 `SIMULATED`
+    - [x] `.env.sample`(또는 `env.example`), `README.md`에 환경변수 항목 추가 (`ORDER_EXECUTION`, `MAX_SLIPPAGE_BPS`, `ORDER_TIMEOUT_SEC`, `ORDER_RETRY`, `ORDER_KILL_SWITCH`)
+    - [x] `live_trader_gpt.py`에서 환경변수 로드 및 `TradeExecutor`로 전달 (현재 executor 속성으로 보관)
+    - [x] 기본값: `ORDER_EXECUTION=SIMULATED`, `MAX_SLIPPAGE_BPS=50`, `ORDER_TIMEOUT_SEC=10`, `ORDER_RETRY=3`, `ORDER_KILL_SWITCH=false`
+- [x] `_place_buy_order`/`_place_sell_order`에 `client.create_order(...)` 연동 (MARKET 우선)
+    - [x] `TradeExecutor`에 `execution_mode` 분기 (LIVE 실제 호출 적용)
+    - [x] BUY: `quoteOrderQty` 사용, SELL: `quantity` 사용, 공통: `newOrderRespType='FULL'`
+    - [x] `newClientOrderId` 아이템포턴시 적용 (재시도 시 동일 ID)
+- [x] 심볼 거래 규칙 검증: LOT_SIZE, MIN_NOTIONAL, PRICE_FILTER 적용 및 수량/가격 라운딩 (헬퍼 스캐폴드 추가)
+    - [x] `get_symbol_info(symbol)` 캐시, `LOT_SIZE.stepSize/minQty`, `MIN_NOTIONAL.minNotional`, `PRICE_FILTER.tickSize` 파싱 (`trader/symbol_rules.py`)
+    - [x] `round_qty_to_step(qty, step)`, `validate_min_notional(price, qty, min_notional)`, `round_price_to_tick(price, tick)` 헬퍼 구현
+- [x] 주문 예외 처리 강화: 타임아웃/재시도(backoff), idempotency 키, 네트워크 에러 복구
+    - [x] 재시도 래퍼: 지수 백오프(+지터), `ORDER_RETRY`/`ORDER_TIMEOUT_SEC` 적용
+    - [x] 실패 시 최근 주문 조회(`get_all_orders` 스캔)로 상태 확인/idempotency 보강
+- [x] 주문/체결 추적: `orderId`, 상태 조회, 평균 체결가/수수료 반영, 부분체결 처리
+    - [x] `FULL` 응답 기반 평균가/체결수량/수수료 집계
+    - [x] 미완료 시 상태 폴링 후 집계
+    - [x] 알림/로그에 `orderId`, 평균가, 체결수량, 수수료 포함
+- [x] 슬리피지/체결 안전장치: 최대 허용 슬리피지, 최소 체결 금액, 킬스위치 환경변수
+    - [x] 사전 가드: `get_orderbook_ticker` 스프레드/추정 슬리피지 > `MAX_SLIPPAGE_BPS`면 주문 차단
+    - [x] `ORDER_KILL_SWITCH=true` 시 모든 LIVE 주문 차단 및 경고 알림 (현재 구현: LIVE 분기에서 즉시 차단)
+- [x] 실시간 잔고/포지션 동기화: 체결 후 잔고 갱신, 수수료 고려한 수량 계산
+    - [x] BUY: 실제 체결 수량/평균가로 `Position` 저장, 초기 `stop_price`는 ATR 기반 산출
+    - [x] SELL: 실제 평균가/수수료 포함 PnL 계산, 포지션 제거/저장
+- [x] 유닛: 수량 라운딩/최소 주문금액/슬리피지 가드/아이템포턴시 ([tests/test_trade_executor.py](mdc:tests/test_trade_executor.py))
+- [x] 통합: 타임아웃 후 상태조회(idempotency) → 포지션 반영 ([tests/test_live_trader_orders_integration.py](mdc:tests/test_live_trader_orders_integration.py))
+- [x] 통합: 부분체결 2회 집계 평균가/수량/수수료 정확성
+- [x] 통합: 재시도 성공 시 단일 체결 보장(newClientOrderId 동일성)
+- [x] 문서 업데이트: `README.md`에 실거래/시뮬레이션 모드 설명과 주의 사항 추가
+    - [x] TESTNET 우선 검증 플로우, 보호 장치 설명, 실행 예시 및 경고 문구
+
+## 5) 복합 전략(Composite Signal + Kelly Sizing) ✅
+
+- [x] 설계 확정 및 파라미터 기본값 정의(가중치, 임계치, 기간, MaxScore)
+- [x] TDD: 실패 테스트 작성 및 잠금(.cursorignore 유지)
+    - [x] [tests/test_composite_strategy.py](mdc:tests/test_composite_strategy.py): 각 F_i ∈ [-1,1], S 클리핑, 임계치 교차 시 BUY/SELL/HOLD, `dropna()` 후 폐봉만 사용
+    - [x] [tests/test_position_sizer.py](mdc:tests/test_position_sizer.py): Kelly 계산식/클램프 검증, 점수↑ → 포지션 단조 증가
+    - [x] [tests/test_risk_manager.py](mdc:tests/test_risk_manager.py): ATR·k_sl·rr로 브래킷(SL/TP) 정확성(롱/숏 대칭)
+    - [x] [tests/test_live_trader_composite.py](mdc:tests/test_live_trader_composite.py): 전략 점수→사이징→브래킷→주문 플로우(모킹) 통합 검증
+- [x] 전략/사이징/리스크 모듈 구현
+    - [x] [strategies/composite_signal_strategy.py](mdc:strategies/composite_signal_strategy.py): EMA/BB/RSI/MACD/Volume/OBV로 점수 S 계산, `score()`/`get_signal()` 구현(순수, 외부 상태 불변)
+    - [x] [strategy_factory.py](mdc:strategy_factory.py): "composite_signal" 등록 및 기본 설정 주입
+    - [x] [trader/position_sizer.py](mdc:trader/position_sizer.py): `kelly_position_size(capital, win_rate, avg_win, avg_loss, score, max_score, clamps)` 추가
+    - [x] [trader/risk_manager.py](mdc:trader/risk_manager.py) 신규: `compute_initial_bracket(entry, atr, side, k_sl, rr)` 구현
+    - [x] [live_trader_gpt.py](mdc:live_trader_gpt.py): 점수 산출→Kelly×Confidence로 수량 결정→ATR 기반 브래킷 계산→주문 전달 연결
+- [x] [trader/symbol_rules.py](mdc:trader/symbol_rules.py): 심볼별 가중치/임계치/기간 오버라이드(선택)
+    - [x] `resolve_composite_params(symbol, interval, defaults)` 추가 및 `COMPOSITE_PARAM_OVERRIDES` 지원
+    - [x] `live_trader_gpt.py`에서 `EXECUTION_TIMEFRAME` 기준 오버라이드 적용
+- [x] 백테스트/검증
+    - [x] 폐봉 기준 루프(df[:i+1])로 룩어헤드 방지, 수수료/슬리피지 반영 (stub 구현)
+    - [x] `backtest_logs/` 기록(stub): `summary.json`/`equity.csv`/`trades.csv` 생성 ([backtests/composite_backtest.py](mdc:backtests/composite_backtest.py))
+    - [x] 성과지표 집계(p, b, 평균손익)로 Kelly 입력값 갱신 (요약 파일에 반영)
+- [x] 로깅/관찰성
+    - [x] 점수 S, Kelly f*, Confidence, 최종 Pos, ATR, SL/TP를 체결 로그에 포함 (BUY 알림)
+    - [x] 파일 기반 주문/체결/트레이드 로깅: 라이브 `live_logs/<run_id>/orders.csv,fills.csv,trades.csv,events.log` ([trader/trade_logger.py](mdc:trader/trade_logger.py), [trader/trade_executor.py](mdc:trader/trade_executor.py), [live_trader_gpt.py](mdc:live_trader_gpt.py))
+- [x] 문서/런북
+    - [x] [README.md](mdc:README.md) 갱신: 전략 개요/파라미터/사용 방법
+    - [x] 실행 예시 및 보호장치 주의사항 추가
+    - [x] [README_ko.md](mdc:README_ko.md) 추가: 한국어 README 생성
+
+## 7) 고급 포지션 관리 기능 (Advanced Position Management) ✅
+
+### Phase 1: Position 모델 확장 + Signal 체계 개선
+- [x] Signal enum 확장: `BUY_NEW`, `BUY_ADD`, `SELL_PARTIAL`, `SELL_ALL`, `UPDATE_TRAIL`
+- [x] PositionAction dataclass 추가
+- [x] Position 클래스 대폭 확장: `legs`, `partial_exits`, `trailing_stop_price`, `highest_price`
+- [x] strategies/base_strategy.py에 `get_position_action()` 메소드 추가
+- [x] live_trader_gpt.py에 포지션 액션 처리 프레임워크 추가
+- [x] 모든 테스트 통과 및 기존 호환성 유지
+
+### Phase 2: 불타기/물타기 로직 추가
+- [x] [trader/position_manager.py](mdc:trader/position_manager.py) 구현: 불타기(Pyramiding)와 물타기(Averaging Down) 전략
+- [x] 불타기: 3% 수익 시 추가 매수 (최대 3회, 시간 간격 제한)
+- [x] 물타기: -5% 손실 시 추가 매수 (최대 2회, 위험 관리)
+- [x] ATRTrailingStopStrategy에 PositionManager 통합
+- [x] live_trader_gpt.py에서 `BUY_ADD` 액션 처리 로직 구현
+
+### Phase 3: 트레일링 스탑 상향 갱신
+- [x] [trader/trailing_stop_manager.py](mdc:trader/trailing_stop_manager.py) 구현: ATR 기반 동적 트레일링 스탑
+- [x] 2% 수익 시 트레일링 활성화, 최고가 업데이트 시 스탑 상향
+- [x] ATRTrailingStopStrategy에 TrailingStopManager 통합
+- [x] live_trader_gpt.py에서 `UPDATE_TRAIL` 액션 처리 로직 구현
+
+### Phase 4: 부분 청산 로직
+- [x] [trader/partial_exit_manager.py](mdc:trader/partial_exit_manager.py) 구현: 단계별 이익 실현
+- [x] 5%, 10%, 15%, 20% 수익 구간별 부분 청산 (30-40% 비율)
+- [x] 부분 청산 이력 관리 및 중복 방지
+- [x] ATRTrailingStopStrategy에 PartialExitManager 통합
+- [x] live_trader_gpt.py에서 `SELL_PARTIAL` 액션 처리 로직 구현
+
+### 새로운 모듈들:
+- [x] [trader/position_manager.py](mdc:trader/position_manager.py): 불타기/물타기 전략 관리
+- [x] [trader/trailing_stop_manager.py](mdc:trader/trailing_stop_manager.py): ATR 기반 트레일링 스탑
+- [x] [trader/partial_exit_manager.py](mdc:trader/partial_exit_manager.py): 단계별 부분 청산
+- [x] [strategies/base_strategy.py](mdc:strategies/base_strategy.py): PositionAction 지원 추가
+- [x] [strategies/atr_trailing_stop_strategy.py](mdc:strategies/atr_trailing_stop_strategy.py): 고급 포지션 관리 통합
+
+### 새로운 테스트들:
+- [x] [tests/test_strategy.py](mdc:tests/test_strategy.py): Phase 1-4 기능 검증 (총 17개 테스트)
+
+## 8) 파일 기반 로깅 및 백테스트 산출물 ✅
+
+- [x] 공용 로거 추가: [trader/trade_logger.py](mdc:trader/trade_logger.py)
+- [x] 실거래 통합: [trader/trade_executor.py](mdc:trader/trade_executor.py)에서 SIMULATED/LIVE 공통 주문/체결/트레이드 기록
+- [x] 트레이더 연결: [live_trader_gpt.py](mdc:live_trader_gpt.py)에서 `TradeLogger` 생성/주입 및 시작/종료 이벤트 기록 (`LIVE_LOG_DIR`, `RUN_ID` 지원)
+- [x] 백테스트 출력: [backtests/composite_backtest.py](mdc:backtests/composite_backtest.py) `run_backtest(..., write_logs=True, log_dir, run_id)` 지원으로 `summary.json`/`equity.csv`/`trades.csv` 생성
+- [x] 테스트 추가: [tests/test_trade_logger.py](mdc:tests/test_trade_logger.py), [tests/test_trade_executor_logging.py](mdc:tests/test_trade_executor_logging.py), [tests/test_backtest_logging.py](mdc:tests/test_backtest_logging.py)
+- [x] 문서화: `README.md`에 로그 파일 스키마/경로, 환경변수(`LIVE_LOG_DIR`, `RUN_ID`), 백테스트 산출물 설명 추가
+
+## 9) 프로그램 종료 시 최종 수익률 기록 기능 ✅
+
+- [x] 성과 계산 모듈 구현: [trader/performance_calculator.py](mdc:trader/performance_calculator.py) - 전체 포트폴리오 성과(실현/미실현 손익, 승률, 샤프 비율 등) 자동 계산
+- [x] TradeLogger 확장: [trader/trade_logger.py](mdc:trader/trade_logger.py)에 `save_final_performance()` 메서드 추가로 `final_performance.json` 파일 생성
+- [x] LiveTrader 종료 처리 개선: [live_trader_gpt.py](mdc:live_trader_gpt.py) `_shutdown()` 메서드에 최종 성과 자동 계산 및 저장 로직 추가
+- [x] 단위 테스트: [tests/test_performance_calculator.py](mdc:tests/test_performance_calculator.py) - 9개 테스트 케이스로 모든 시나리오 검증 (빈 데이터, 정상 데이터, 오류 처리 등)
+- [x] 문서화: [README.md](mdc:README.md)에 `final_performance.json` 파일 스키마, 예시 데이터, 해석 가이드 추가
+- [x] 통합 검증: 실제 TradeLogger와 연동하여 `trades.csv` 기반 성과 계산 및 `final_performance.json` 파일 생성 확인
+
+### 주요 특징:
+- **자동 실행**: 프로그램 종료(SIGINT/SIGTERM) 시 모든 포지션 정리 후 자동으로 성과 계산
+- **포괄적 지표**: 20개 이상의 성과 지표 (수익률, 승률, 프로핏 팩터, 샤프 비율, 최대 낙폭 등)
+- **안전성**: 오류 발생 시 빈 결과 반환으로 시스템 안정성 보장
+- **실시간 알림**: 텔레그램으로 최종 성과 리포트 자동 전송
+- **파일 저장**: `live_logs/{YYYYMMDD}/{RUN_ID}/final_performance.json`에 JSON 형식으로 영구 저장
+
+## 10) 라이브 로그 날짜별 디렉터리 그룹화 ✅
+
+- [x] TradeLogger에 일자 파티셔닝 옵션 추가(`date_partition='daily'`, `tz`, `date_fmt`)
+- [x] LiveTrader에서 환경변수로 제어(`LIVE_LOG_DATE_PARTITION`, `LOG_TZ`, `LOG_DATE_FMT`)
+- [x] env.example/README 문서화 및 예시 경로 갱신
+- [x] 테스트 추가: `tests/test_trade_logger_date_partition.py`
+
+## 11) 코드 품질 및 구조 개선 (Code Quality & Architecture Refactoring) ✅
+
+### 11.1) `live_trader_gpt.py` 모듈화 및 복잡성 해소
+- [x] **높은 우선순위**: LiveTrader 클래스 분리 및 모듈화
+    - [x] `OrderManager` 클래스 구현 - 주문 실행과 검증 담당
+    - [x] `TradingEngine` 클래스 구현 - 메인 거래 로직 조율
+    - [x] Configuration 의존성 주입으로 설정 분리
+    - [x] 컴포넌트별 책임 명확히 분리
+    - [x] Template Method 패턴을 활용한 LIVE/SIMULATED 모드 중복 제거
+    - [x] `OrderExecutionTemplate` 추상 클래스 구현 - 공통 알고리즘 정의
+    - [x] `LiveOrderExecutor` 클래스 구현 - 실제 API 호출
+    - [x] `SimulatedOrderExecutor` 클래스 구현 - 시뮬레이션 모드
+    - [x] 코드 중복 제거 및 확장성 개선
+
+### 11.2) Signal 및 Position 모델 개선
+- [x] **높은 우선순위**: Signal Enum의 과도한 확장 해결
+    - [x] 새로운 `TradingSignal` 클래스 구현으로 상태와 액션 분리
+    - [x] 기존 `Signal` Enum과의 호환성 유지
+    - [x] 타입 안정성과 확장성 개선
+
+### 11.3) 설정 관리 및 상수화
+- [x] **높은 우선순위**: 매직 넘버 및 하드코딩된 값들 제거
+    - [x] `TradingConstants` 클래스 생성으로 모든 상수 중앙화
+    - [x] Pydantic을 활용한 설정 검증
+    - [x] Configuration 클래스로 환경변수와 하드코딩 혼재 해결
+
+### 완료된 개선사항들:
+✅ **Configuration 클래스** - 환경변수와 설정 값들을 Pydantic으로 중앙화
+✅ **TradingConstants 클래스** - 모든 매직 넘버와 하드코딩된 값들을 상수로 정의
+✅ **커스텀 예외 클래스들** - `TradingError`, `OrderError`, `ConfigurationError` 등 정의
+✅ **Signal 구조 개선** - `TradingSignal` 클래스로 상태와 액션 명확히 분리, 기존 호환성 유지
+✅ **OrderManager 클래스** - 주문 실행과 검증을 담당하는 모듈화된 컴포넌트
+✅ **TradingEngine 클래스** - 메인 거래 로직을 조율하는 모듈화된 엔진
+✅ **LiveTrader 모듈화** - 책임 분산과 테스트 용이성 개선
+✅ **Template Method 패턴 적용** - LIVE/SIMULATED 모드 코드 중복 제거 및 확장성 개선
