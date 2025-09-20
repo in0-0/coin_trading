@@ -31,6 +31,10 @@ def run_backtest(*, df: pd.DataFrame, strategy, warmup: int = 50, fee_bps: float
     iterations = 0
     trades = 0
     pnl = 0.0
+    wins_sum = 0.0
+    wins_cnt = 0
+    losses_sum = 0.0
+    losses_cnt = 0
     logger = None
     if write_logs:
         base_dir = log_dir or "backtest_logs"
@@ -51,10 +55,29 @@ def run_backtest(*, df: pd.DataFrame, strategy, warmup: int = 50, fee_bps: float
             # minimal equity tracking: assume pnl accumulates; equity=10000+pnl for placeholder
             logger.log_equity_point(equity=10000.0 + pnl)
 
+    # Compute basic metrics even if trades == 0 to populate summary keys
+    avg_win = (wins_sum / wins_cnt) if wins_cnt > 0 else 0.0
+    avg_loss = (losses_sum / losses_cnt) if losses_cnt > 0 else 0.0
+    win_rate_p = (wins_cnt / max(1, wins_cnt + losses_cnt))
+    payoff_b = (avg_win / abs(avg_loss)) if avg_loss < 0 else 0.0
+    expectancy = win_rate_p * avg_win + (1 - win_rate_p) * avg_loss
+
+    summary_dict = {
+        "iterations": iterations,
+        "trades": trades,
+        "pnl": pnl,
+        "win_rate_p": win_rate_p,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "payoff_b": payoff_b,
+        "expectancy": expectancy,
+        "kelly_inputs": {"p": win_rate_p, "b": payoff_b},
+    }
+
     if logger is not None:
         # minimal files to satisfy test expectations
-        logger.save_summary({"iterations": iterations, "trades": trades, "pnl": pnl})
+        logger.save_summary(summary_dict)
         # ensure trades.csv exists even if empty by writing a header once
         logger._write_csv_row(filename="trades.csv", headers=("ts", "mode", "symbol", "entry_price", "exit_price", "qty", "pnl", "pnl_pct"), row={"ts": 0, "mode": "BACKTEST", "symbol": "", "entry_price": 0.0, "exit_price": 0.0, "qty": 0.0, "pnl": 0.0, "pnl_pct": 0.0})
         # and orders/fills optional: not required by test
-    return {"iterations": iterations, "trades": trades, "pnl": pnl}
+    return summary_dict
