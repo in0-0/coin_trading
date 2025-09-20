@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 from typing import Dict
 
-from core.configuration import Configuration
+from core.dependency_injection import get_config
 from models import Position, Signal
 from trader.trade_executor import TradeExecutor
 

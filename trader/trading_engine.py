@@ -9,10 +9,9 @@ import signal
 from typing import Dict, Optional, Callable, Any
 from datetime import datetime
 
-from core.configuration import Configuration
+from core.dependency_injection import get_config
 from core.exceptions import TradingError, OrderError, DataError
-from core.signal import TradingSignal, SignalType, SignalAction
-from models import Position, Signal
+from models import Signal, Position
 from trader.order_manager import OrderManager
 from trader.position_manager import PositionManager
 from binance_data import BinanceData

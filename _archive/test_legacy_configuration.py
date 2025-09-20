@@ -4,7 +4,7 @@ TDD: Configuration 클래스에 대한 실패하는 테스트 작성
 import unittest
 from unittest.mock import patch, MagicMock
 
-from core.configuration import Configuration
+from core.dependency_injection import get_config
 
 
 class TestConfiguration(unittest.TestCase):
@@ -12,7 +12,7 @@ class TestConfiguration(unittest.TestCase):
 
     def test_configuration_class_exists(self):
         """Configuration 클래스가 존재하는지 확인"""
-        from core.configuration import Configuration
+        from core.dependency_injection import get_config
         self.assertTrue(issubclass(Configuration, object))
 
     def test_configuration_should_load_env_vars(self):

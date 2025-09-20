@@ -440,9 +440,9 @@ class ImprovedLiveTrader:
             win_rate = final_performance.get('win_rate', 0.0)
 
             message = "📊 FINAL PERFORMANCE REPORT\n"
-            message += f"Total Return: {total_return".2f"}%\n"
+            message += f"Total Return: {total_return:.2f}%\n"
             message += f"Total Trades: {total_trades}\n"
-            message += f"Win Rate: {win_rate".1f"}%"
+            message += f"Win Rate: {win_rate:.1f}%"
 
             self.notifier.send(message)
 

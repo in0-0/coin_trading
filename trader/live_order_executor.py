@@ -9,7 +9,7 @@ import random
 from typing import Dict, Optional, Any
 
 from binance.client import Client
-from core.configuration import Configuration
+from core.dependency_injection import get_config
 from core.exceptions import OrderError
 from models import Position
 from binance_data import BinanceData

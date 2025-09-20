@@ -7,8 +7,7 @@ import logging
 from typing import Dict, Optional, Any
 from datetime import datetime
 
-from core.configuration import Configuration
-from core.constants import TradingConstants
+from core.dependency_injection import get_config
 from core.exceptions import OrderError, ValidationError, ConfigurationError
 from models import Position
 from trader.trade_executor import TradeExecutor

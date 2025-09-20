@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 
-from core.configuration import Configuration
+from core.dependency_injection import get_config
 from core.exceptions import OrderError
 from models import Position
 

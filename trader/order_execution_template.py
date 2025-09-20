@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Optional, Any, Tuple
 
 from binance.client import Client
-from core.configuration import Configuration
+from core.dependency_injection import get_config
 from core.exceptions import OrderError, ValidationError
 from models import Position
 from binance_data import BinanceData

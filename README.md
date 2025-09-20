@@ -415,6 +415,21 @@ uv run pytest tests/test_improved_components.py -v
 
 17 tests covering error handling, data validation, position management, and integration scenarios.
 
+### Legacy Code Cleanup
+
+The project has been cleaned up to remove duplicate and unused legacy code:
+
+- **core/configuration.py** → moved to `_archive/legacy_configuration.py`
+- **core/constants.py** → moved to `_archive/legacy_constants.py`
+- **core/signal.py** → moved to `_archive/legacy_signal.py`
+- **tests/test_configuration.py** → moved to `_archive/test_legacy_configuration.py`
+- **refactor_todo.md** → moved to `_archive/legacy_refactor_todo.md`
+
+All imports have been updated to use the improved components:
+- `core.dependency_injection.get_config()` instead of `Configuration` class
+- `models.Signal` instead of `core.signal.Signal`
+- Improved error handling and data validation throughout the codebase
+
 ## CI
 
 GitHub Actions workflow runs Ruff and Pytest on every push and PR. See `.github/workflows/ci.yml`.
