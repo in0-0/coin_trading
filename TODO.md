@@ -21,9 +21,9 @@
 ## 11) 코드 품질 및 구조 개선 (Code Quality & Architecture Refactoring)
 
 ### 11.1) `live_trader_gpt.py` 모듈화 및 복잡성 해소
-- [ ] **중간 우선순위**: 에러 처리 패턴 통일
-    - [ ] 일관된 에러 처리 패턴 적용
-    - [ ] 구체적인 예외 유형별 처리 로직 개선
+- [x] **중간 우선순위**: 에러 처리 패턴 통일
+    - [x] 일관된 에러 처리 패턴 적용 (core/error_handler.py 구현)
+    - [x] 구체적인 예외 유형별 처리 로직 개선 (TradingError 하위 클래스 활용)
 
 - [ ] **낮은 우선순위**: 코드 문서화 개선
     - [ ] 복잡한 로직들에 대한 docstring 추가
@@ -31,16 +31,16 @@
     - [ ] 아키텍처 의사결정 문서화
 
 ### 11.2) Signal 및 Position 모델 개선
-- [ ] **중간 우선순위**: Position 클래스의 책임 분산
-    - [ ] 너무 많은 책임을 가진 `Position` 클래스를 분리
-    - [ ] `PositionLeg`와 `Position`의 관계 개선
-    - [ ] 계산 로직들을 별도 서비스 클래스로 분리
+- [x] **중간 우선순위**: Position 클래스의 책임 분산
+    - [x] 너무 많은 책임을 가진 `Position` 클래스를 분리 (PositionCalculator, PositionStateManager, PositionService)
+    - [x] `PositionLeg`와 `Position`의 관계 개선 (독립적인 데이터 클래스 활용)
+    - [x] 계산 로직들을 별도 서비스 클래스로 분리 (PositionCalculator)
 
 ### 11.4) 의존성 주입 및 테스트 용이성 개선
-- [ ] **중간 우선순위**: 의존성 주입 패턴 개선
-    - [ ] `ATRTrailingStopStrategy`의 생성자 의존성 간소화
-    - [ ] Factory 패턴을 활용한 객체 생성 중앙화
-    - [ ] 테스트 더블의 일관성 향상
+- [x] **중간 우선순위**: 의존성 주입 패턴 개선
+    - [x] `ATRTrailingStopStrategy`의 생성자 의존성 간소화 (StrategyFactory 개선)
+    - [x] Factory 패턴을 활용한 객체 생성 중앙화 (improved_strategy_factory.py)
+    - [x] 테스트 더블의 일관성 향상 (DependencyContainer)
 
 - [ ] **낮은 우선순위**: 테스트 코드 품질 향상
     - [ ] 테스트 데이터 팩토리 활용
@@ -48,10 +48,10 @@
     - [ ] 통합 테스트 커버리지 확대
 
 ### 11.5) 데이터 검증 및 타입 안정성
-- [ ] **중간 우선순위**: 입력 데이터 검증 강화
-    - [ ] `binance_data.py`의 데이터 검증 로직 개선
-    - [ ] Pydantic 모델을 활용한 데이터 검증
-    - [ ] API 응답 데이터의 타입 안정성 보장
+- [x] **중간 우선순위**: 입력 데이터 검증 강화
+    - [x] `binance_data.py`의 데이터 검증 로직 개선 (binance_data_improved.py)
+    - [x] Pydantic 모델을 활용한 데이터 검증 (core/data_models.py)
+    - [x] API 응답 데이터의 타입 안정성 보장 (강력한 타입 검증)
 
 - [ ] **낮은 우선순위**: 타입 힌트 완성도 향상
     - [ ] 누락된 타입 힌트 추가

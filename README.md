@@ -26,6 +26,14 @@ The project is structured as follows:
     -   `risk_manager.py`: Initial bracket calculation (SL/TP).
     -   `symbol_rules.py`: Symbol-specific parameter overrides.
 -   `strategy_factory.py`: A factory for creating strategy objects.
+-   `improved_strategy_factory.py`: Enhanced strategy factory with dependency injection and validation.
+-   `core/`: Core modules for improved architecture.
+    -   `error_handler.py`: Unified error handling system with recovery strategies.
+    -   `data_models.py`: Pydantic V2 models for data validation and type safety.
+    -   `dependency_injection.py`: Dependency injection container and configuration management.
+    -   `position_manager.py`: Position responsibility separation with calculator and state manager.
+-   `binance_data_improved.py`: Enhanced Binance data provider with strong validation.
+-   `improved_live_trader.py`: Refactored live trader with improved architecture.
 -   `tests/`: Contains comprehensive unit tests (17+ tests covering advanced features).
 -   `data/`: Contains historical market data.
 -   `backtest_logs/`: Backtest logs and outputs.
@@ -37,6 +45,10 @@ The project uses the following design patterns:
 
 -   **Strategy Pattern**: The trading logic is encapsulated in different strategy classes, which can be easily swapped. This is implemented in the `strategies` directory.
 -   **Factory Pattern**: A factory is used to create strategy objects, decoupling the `LiveTrader` from the concrete strategy implementations. This is implemented in the `strategy_factory.py` file.
+-   **Dependency Injection**: Centralized configuration and dependency management through a container pattern. Implemented in `core/dependency_injection.py`.
+-   **Error Handler Pattern**: Unified error handling with recovery strategies and context-aware logging. Implemented in `core/error_handler.py`.
+-   **Single Responsibility Principle**: Position management split into calculator, state manager, and service classes. Implemented in `core/position_manager.py`.
+-   **Data Validation Pattern**: Pydantic V2 models for runtime type checking and data validation. Implemented in `core/data_models.py`.
 
 ## Setup
 
@@ -77,7 +89,9 @@ The project uses the following design patterns:
 -   Lint: `uv run ruff check .`
 -   Lint (fix): `uv run ruff check --fix .`
 -   Test: `uv run pytest -q`
--   Run trader: `uv run python live_trader_gpt.py`
+-   Test improved components: `uv run pytest tests/test_improved_components.py -v`
+-   Run original trader: `uv run python live_trader_gpt.py`
+-   Run improved trader: `uv run python improved_live_trader.py`
 
 ## Run Modes (TESTNET vs REAL)
 
@@ -331,6 +345,75 @@ Partial fills: multiple rows appear in `fills.csv` with the same `client_order_i
     -   `kelly_inputs`: `{ "p": win_rate_p, "b": payoff_b }`
 -   `equity.csv`: time series of equity
 -   `trades.csv`: backtest trade rows (header may exist even if empty)
+
+## Improved Architecture (Code Quality & Structure Refactoring)
+
+The project includes a comprehensive refactoring (TODO #11) focused on code quality and architectural improvements:
+
+### Key Improvements
+
+#### 1. Unified Error Handling (`core/error_handler.py`)
+- **Centralized Error Processing**: All errors are handled through a single system with context-aware logging
+- **Recovery Strategies**: Automatic recovery for common error types (network, data, strategy errors)
+- **Context Preservation**: Rich error context including operation, symbol, and metadata
+- **Notification Integration**: Automatic user notifications for critical errors
+
+#### 2. Data Validation & Type Safety (`core/data_models.py`)
+- **Pydantic V2 Models**: Runtime type checking and data validation
+- **Strong Typing**: Decimal precision for financial data, datetime validation
+- **Business Rules**: Automatic validation of price consistency, time ordering
+- **Schema Evolution**: Extensible models for future enhancements
+
+#### 3. Dependency Injection (`core/dependency_injection.py`)
+- **Configuration Management**: Centralized environment variable handling
+- **Service Container**: Lazy initialization and dependency management
+- **Environment Validation**: Automatic validation of required configurations
+- **Strategy Configuration**: Per-symbol strategy parameter management
+
+#### 4. Position Responsibility Separation (`core/position_manager.py`)
+- **PositionCalculator**: Pure calculation logic (average price, P&L, etc.)
+- **PositionStateManager**: State management and validation
+- **PositionService**: High-level business logic orchestration
+- **Data Integrity**: Comprehensive validation and error handling
+
+#### 5. Enhanced Strategy Factory (`improved_strategy_factory.py`)
+- **Validation**: Strategy-specific parameter validation
+- **Configuration Injection**: Automatic dependency resolution
+- **Extensibility**: Easy registration of new strategies
+- **Error Handling**: Clear error messages with context
+
+#### 6. Improved Data Provider (`binance_data_improved.py`)
+- **Strong Validation**: Pydantic models for all API responses
+- **Error Context**: Detailed error information for debugging
+- **Data Integrity**: Automatic data consistency checks
+- **Recovery Mechanisms**: Fallback strategies for data issues
+
+### Architecture Benefits
+
+1. **Maintainability**: Clear separation of concerns and single responsibility
+2. **Testability**: Isolated components with dependency injection
+3. **Reliability**: Comprehensive error handling and recovery
+4. **Type Safety**: Runtime validation prevents data corruption
+5. **Extensibility**: Easy to add new strategies and components
+6. **Observability**: Rich logging and error context for debugging
+
+### Migration Path
+
+The improved architecture is backward compatible. You can:
+
+1. **Continue using original components**: All existing code continues to work
+2. **Gradually migrate**: Replace components one by one
+3. **Use improved versions**: Run `uv run python improved_live_trader.py` for the new architecture
+
+### Testing
+
+Comprehensive test suite for all improved components:
+
+```bash
+uv run pytest tests/test_improved_components.py -v
+```
+
+17 tests covering error handling, data validation, position management, and integration scenarios.
 
 ## CI
 
