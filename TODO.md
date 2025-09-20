@@ -113,6 +113,7 @@
 - [ ] 문서/런북
     - [x] [README.md](mdc:README.md) 갱신: 전략 개요/파라미터/사용 방법
     - [x] 실행 예시 및 보호장치 주의사항 추가
+    - [x] [README_ko.md](mdc:README_ko.md) 추가: 한국어 README 생성
 
 ## 6) 파일 기반 로깅 및 백테스트 산출물
 
