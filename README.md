@@ -283,7 +283,9 @@ Notes:
 
 ### Live/Simulated Logs (`TradeLogger`)
 
--   Base directory: `LIVE_LOG_DIR` (default `live_logs`), each run under `LIVE_LOG_DIR/<RUN_ID>/`.
+-   Base directory: `LIVE_LOG_DIR` (default `live_logs`)
+-   By default, logs are grouped by date: `LIVE_LOG_DIR/<YYYYMMDD>/<RUN_ID>/`.
+-   To disable date partitioning, set `LIVE_LOG_DATE_PARTITION=0`.
 -   Files written:
     -   `orders.csv` (ts, mode, symbol, side, price, qty, quote_qty, client_order_id)
     -   `fills.csv` (ts, mode, symbol, side, price, qty, fee, fee_asset, order_id, client_order_id)
@@ -313,7 +315,7 @@ Example structure:
   "profit_factor": 1.8,
   "sharpe_ratio": 1.2,
   "open_positions_count": 0,
-  "log_directory": "live_logs/20240115_103000_atr_trailing_stop"
+  "log_directory": "live_logs/20240115/20240115_103000_atr_trailing_stop"
 }
 ```
 

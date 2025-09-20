@@ -178,4 +178,11 @@
 - **포괄적 지표**: 20개 이상의 성과 지표 (수익률, 승률, 프로핏 팩터, 샤프 비율, 최대 낙폭 등)
 - **안전성**: 오류 발생 시 빈 결과 반환으로 시스템 안정성 보장
 - **실시간 알림**: 텔레그램으로 최종 성과 리포트 자동 전송
-- **파일 저장**: `live_logs/{RUN_ID}/final_performance.json`에 JSON 형식으로 영구 저장
+- **파일 저장**: `live_logs/{YYYYMMDD}/{RUN_ID}/final_performance.json`에 JSON 형식으로 영구 저장
+ 
+## 10) 라이브 로그 날짜별 디렉터리 그룹화
+
+- [x] TradeLogger에 일자 파티셔닝 옵션 추가(`date_partition='daily'`, `tz`, `date_fmt`)
+- [x] LiveTrader에서 환경변수로 제어(`LIVE_LOG_DATE_PARTITION`, `LOG_TZ`, `LOG_DATE_FMT`)
+- [x] env.example/README 문서화 및 예시 경로 갱신
+- [x] 테스트 추가: `tests/test_trade_logger_date_partition.py`

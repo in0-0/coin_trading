@@ -285,7 +285,9 @@ print(summary)  # {"iterations": ..., "trades": 0, "pnl": 0.0}
 
 ### 라이브/시뮬레이션 로그(`TradeLogger`)
 
-- 기본 디렉터리: `LIVE_LOG_DIR`(기본 `live_logs`), 각 실행은 `LIVE_LOG_DIR/<RUN_ID>/` 하위에 저장됩니다.
+- 기본 디렉터리: `LIVE_LOG_DIR`(기본 `live_logs`)
+- 기본적으로 날짜별 디렉터리로 그룹화됩니다: `LIVE_LOG_DIR/<YYYYMMDD>/<RUN_ID>/`
+- 날짜 파티셔닝을 끄려면 `LIVE_LOG_DATE_PARTITION=0`을 설정하세요.
 - 생성 파일:
   - `orders.csv` (ts, mode, symbol, side, price, qty, quote_qty, client_order_id)
   - `fills.csv` (ts, mode, symbol, side, price, qty, fee, fee_asset, order_id, client_order_id)

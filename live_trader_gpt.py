@@ -88,7 +88,19 @@ class LiveTrader:
         # Initialize trade logger (live logs dir configurable via env; default to project root live_logs)
         live_log_dir = os.getenv("LIVE_LOG_DIR", "live_logs")
         run_id = os.getenv("RUN_ID") or time.strftime("%Y%m%d_%H%M%S_" + STRATEGY_NAME)
-        self.trade_logger = TradeLogger(base_dir=live_log_dir, run_id=run_id, mode=ORDER_EXECUTION)
+        # Optional date partitioning for live logs
+        date_part_env = os.getenv("LIVE_LOG_DATE_PARTITION", "1").strip().lower()
+        enable_date_partition = date_part_env in ("1", "true", "yes", "on")
+        log_tz = os.getenv("LOG_TZ", "UTC")
+        log_date_fmt = os.getenv("LOG_DATE_FMT", "%Y%m%d")
+        self.trade_logger = TradeLogger(
+            base_dir=live_log_dir,
+            run_id=run_id,
+            mode=ORDER_EXECUTION,
+            date_partition=("daily" if enable_date_partition else "none"),
+            tz=log_tz,
+            date_fmt=log_date_fmt,
+        )
         self.executor = TradeExecutor(
             self.client,
             self.data_provider,

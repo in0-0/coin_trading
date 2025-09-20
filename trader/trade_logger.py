@@ -3,6 +3,11 @@ import json
 import os
 import time
 from collections.abc import Iterable
+from datetime import datetime, timezone
+try:  # Python 3.9+
+    from zoneinfo import ZoneInfo  # type: ignore
+except Exception:  # pragma: no cover
+    ZoneInfo = None  # type: ignore
 
 
 class TradeLogger:
@@ -12,8 +17,23 @@ class TradeLogger:
     with headers auto-created on first write.
     """
 
-    def __init__(self, *, base_dir: str, run_id: str, mode: str = "SIMULATED"):
-        self.base_dir = os.path.join(base_dir, run_id)
+    def __init__(self, *, base_dir: str, run_id: str, mode: str = "SIMULATED", date_partition: str = "none", tz: str | None = None, date_fmt: str = "%Y%m%d"):
+        # Determine base directory with optional date partitioning
+        partition = (date_partition or "none").lower()
+        target_dir = base_dir
+        if partition in ("daily", "day", "date"):
+            tz_name = tz or os.getenv("LOG_TZ", "UTC")
+            # Resolve timezone; fallback to UTC if not available
+            if ZoneInfo is not None:
+                try:
+                    tzinfo = ZoneInfo(tz_name)
+                except Exception:
+                    tzinfo = timezone.utc
+            else:
+                tzinfo = timezone.utc
+            date_str = datetime.now(tzinfo).strftime(date_fmt or "%Y%m%d")
+            target_dir = os.path.join(base_dir, date_str)
+        self.base_dir = os.path.join(target_dir, run_id)
         self.mode = str(mode).upper()
         os.makedirs(self.base_dir, exist_ok=True)
 
