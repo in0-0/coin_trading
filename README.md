@@ -51,6 +51,7 @@ The project uses the following design patterns:
 -   **TELEGRAM_BOT_TOKEN**, **TELEGRAM_CHAT_ID** (optional)
 -   **SYMBOLS** (comma-separated), **EXEC_INTERVAL_SECONDS**, **LOG_FILE**
  -   Execution (orders): **ORDER_EXECUTION** (`SIMULATED`|`LIVE`, default `SIMULATED`), **MAX_SLIPPAGE_BPS** (default `50`), **ORDER_TIMEOUT_SEC** (default `10`), **ORDER_RETRY** (default `3`), **ORDER_KILL_SWITCH** (`true`/`false`, default `false`)
+ -   Live logs: **LIVE_LOG_DIR** (default `live_logs`), **RUN_ID** (default timestamp + strategy)
 
 -   Strategy selection:
     -   **STRATEGY_NAME**: `atr_trailing_stop` (default) or `composite_signal`
@@ -213,6 +214,28 @@ print(summary)  # {"iterations": ..., "trades": 0, "pnl": 0.0}
 Notes:
 -   Use only closed candles; indicators call `dropna()` internally
 -   Fees/slippage are configurable (bps). Future updates will add PnL/trade logs under `backtest_logs/` and Kelly input (p, avg_win, avg_loss) aggregation
+
+## Logging & Artifacts
+
+### Live/Simulated Logs (`TradeLogger`)
+
+-   Base directory: `LIVE_LOG_DIR` (default `live_logs`), each run under `LIVE_LOG_DIR/<RUN_ID>/`.
+-   Files written:
+    -   `orders.csv` (ts, mode, symbol, side, price, qty, quote_qty, client_order_id)
+    -   `fills.csv` (ts, mode, symbol, side, price, qty, fee, fee_asset, order_id, client_order_id)
+    -   `trades.csv` (ts, mode, symbol, entry_price, exit_price, qty, pnl, pnl_pct)
+    -   `events.log` (ts, mode, message)
+
+Partial fills: multiple rows appear in `fills.csv` with the same `client_order_id`. Aggregated average price and total quantity are reflected in notifications and position state.
+
+### Backtest Artifacts (`backtest_logs/<run_id>/`)
+
+-   `summary.json` includes keys:
+    -   `iterations`, `trades`, `pnl`
+    -   `win_rate_p`, `avg_win`, `avg_loss`, `payoff_b`, `expectancy`
+    -   `kelly_inputs`: `{ "p": win_rate_p, "b": payoff_b }`
+-   `equity.csv`: time series of equity
+-   `trades.csv`: backtest trade rows (header may exist even if empty)
 
 ## CI
 

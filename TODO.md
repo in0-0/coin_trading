@@ -81,8 +81,8 @@
 - [ ] 통합 테스트: `Client.create_order` 모킹으로 엔트리/청산 플로우 검증, 규칙 위반 케이스 포함
     - [x] 유닛: 수량 라운딩/최소 주문금액/슬리피지 가드/아이템포턴시 ([tests/test_trade_executor.py](mdc:tests/test_trade_executor.py))
     - [x] 통합: 타임아웃 후 상태조회(idempotency) → 포지션 반영 ([tests/test_live_trader_orders_integration.py](mdc:tests/test_live_trader_orders_integration.py))
-    - [ ] 통합: 부분체결 2회 집계 평균가/수량/수수료 정확성
-    - [ ] 통합: 재시도 성공 시 단일 체결 보장(newClientOrderId 동일성)
+    - [x] 통합: 부분체결 2회 집계 평균가/수량/수수료 정확성
+    - [x] 통합: 재시도 성공 시 단일 체결 보장(newClientOrderId 동일성)
 - [x] 문서 업데이트: `README.md`에 실거래/시뮬레이션 모드 설명과 주의 사항 추가
     - [x] TESTNET 우선 검증 플로우, 보호 장치 설명, 실행 예시 및 경고 문구
 
@@ -106,13 +106,13 @@
 - [ ] 백테스트/검증
     - [x] 폐봉 기준 루프(df[:i+1])로 룩어헤드 방지, 수수료/슬리피지 반영 (stub 구현)
     - [x] `backtest_logs/` 기록(stub): `summary.json`/`equity.csv`/`trades.csv` 생성 ([backtests/composite_backtest.py](mdc:backtests/composite_backtest.py))
-    - [ ] 성과지표 집계(p, b, 평균손익)로 Kelly 입력값 갱신 (요약 파일에 반영)
+    - [x] 성과지표 집계(p, b, 평균손익)로 Kelly 입력값 갱신 (요약 파일에 반영)
 - [ ] 로깅/관찰성
     - [x] 점수 S, Kelly f*, Confidence, 최종 Pos, ATR, SL/TP를 체결 로그에 포함 (BUY 알림)
     - [x] 파일 기반 주문/체결/트레이드 로깅: 라이브 `live_logs/<run_id>/orders.csv,fills.csv,trades.csv,events.log` ([trader/trade_logger.py](mdc:trader/trade_logger.py), [trader/trade_executor.py](mdc:trader/trade_executor.py), [live_trader_gpt.py](mdc:live_trader_gpt.py))
 - [ ] 문서/런북
-    - [ ] [README.md](mdc:README.md) 갱신: 전략 개요/파라미터/사용 방법
-    - [ ] 실행 예시 및 보호장치 주의사항 추가
+    - [x] [README.md](mdc:README.md) 갱신: 전략 개요/파라미터/사용 방법
+    - [x] 실행 예시 및 보호장치 주의사항 추가
 
 ## 6) 파일 기반 로깅 및 백테스트 산출물
 
@@ -121,4 +121,4 @@
 - [x] 트레이더 연결: [live_trader_gpt.py](mdc:live_trader_gpt.py)에서 `TradeLogger` 생성/주입 및 시작/종료 이벤트 기록 (`LIVE_LOG_DIR`, `RUN_ID` 지원)
 - [x] 백테스트 출력: [backtests/composite_backtest.py](mdc:backtests/composite_backtest.py) `run_backtest(..., write_logs=True, log_dir, run_id)` 지원으로 `summary.json`/`equity.csv`/`trades.csv` 생성
 - [x] 테스트 추가: [tests/test_trade_logger.py](mdc:tests/test_trade_logger.py), [tests/test_trade_executor_logging.py](mdc:tests/test_trade_executor_logging.py), [tests/test_backtest_logging.py](mdc:tests/test_backtest_logging.py)
-- [ ] 문서화: `README.md`에 로그 파일 스키마/경로, 환경변수(`LIVE_LOG_DIR`, `RUN_ID`), 백테스트 산출물 설명 추가
+- [x] 문서화: `README.md`에 로그 파일 스키마/경로, 환경변수(`LIVE_LOG_DIR`, `RUN_ID`), 백테스트 산출물 설명 추가
