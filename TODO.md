@@ -190,11 +190,13 @@
 ## 11) 코드 품질 및 구조 개선 (Code Quality & Architecture Refactoring)
 
 ### 11.1) `live_trader_gpt.py` 모듈화 및 복잡성 해소
-- [ ] **높은 우선순위**: LiveTrader 클래스 분리 및 모듈화
-    - [ ] `LiveTrader` 클래스를 더 작은 단위로 분리 (OrderManager, PositionManager 등)
+- [x] **높은 우선순위**: LiveTrader 클래스 분리 및 모듈화
+    - [x] `OrderManager` 클래스 구현 - 주문 실행과 검증 담당
+    - [x] `TradingEngine` 클래스 구현 - 메인 거래 로직 조율
+    - [x] Configuration 의존성 주입으로 설정 분리
+    - [x] 컴포넌트별 책임 명확히 분리
     - [ ] Template Method 패턴을 활용한 LIVE/SIMULATED 모드 중복 제거
     - [ ] 긴 메서드들(`market_buy`, `market_sell`)을 별도 클래스로 분리
-    - [x] 설정 관리를 위한 Configuration 클래스 도입
 
 - [ ] **중간 우선순위**: 에러 처리 패턴 통일
     - [x] 커스텀 예외 클래스 정의 (`TradingError`, `OrderError` 등)
@@ -250,6 +252,9 @@
 ✅ **TradingConstants 클래스** - 모든 매직 넘버와 하드코딩된 값들을 상수로 정의
 ✅ **커스텀 예외 클래스들** - `TradingError`, `OrderError`, `ConfigurationError` 등 정의
 ✅ **Signal 구조 개선** - `TradingSignal` 클래스로 상태와 액션 명확히 분리, 기존 호환성 유지
+✅ **OrderManager 클래스** - 주문 실행과 검증을 담당하는 모듈화된 컴포넌트
+✅ **TradingEngine 클래스** - 메인 거래 로직을 조율하는 모듈화된 엔진
+✅ **LiveTrader 모듈화** - 책임 분산과 테스트 용이성 개선
 
 ### 구현 우선순위 (업데이트됨):
 1. **진행 중**: `live_trader_gpt.py` 모듈화 (높은 우선순위)
