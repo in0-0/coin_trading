@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from types import SimpleNamespace
+from typing import Any, Dict, Optional, Tuple
 
 
 @dataclass
@@ -71,3 +72,62 @@ def validate_min_notional(price: float, qty: float, min_notional: float) -> bool
     return (price * qty) >= min_notional
 
 
+
+# ---------------- Composite Strategy Parameter Overrides ----------------
+
+# In-memory overrides map. Keyed by (symbol, interval). Values are shallow dicts
+# that may include nested "weights" dicts. This is intentionally minimal and can
+# be later extended to load from TOML under commands/sc/.
+COMPOSITE_PARAM_OVERRIDES: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+
+def _to_namespace(d: Dict[str, Any]) -> SimpleNamespace:
+    ns = SimpleNamespace()
+    for k, v in d.items():
+        setattr(ns, k, v)
+    return ns
+
+
+def _merge_weights(default_w: Any, override_w: Any) -> Any:
+    # Accept dict or namespace for weights
+    if override_w is None:
+        return default_w
+    # Convert both to dicts for merging
+    def as_dict(obj: Any) -> Dict[str, Any]:
+        if isinstance(obj, dict):
+            return dict(obj)
+        # Namespace or any with __dict__
+        try:
+            return dict(obj.__dict__)
+        except Exception:
+            return {}
+
+    merged = as_dict(default_w)
+    merged.update(as_dict(override_w))
+    return _to_namespace(merged)
+
+
+def resolve_composite_params(symbol: str, interval: str, defaults: Any) -> Any:
+    """
+    Merge symbol/interval-specific overrides into composite strategy defaults.
+
+    - Shallow-merge for top-level keys
+    - Special handling for nested weights (merged by key)
+    - Returns a SimpleNamespace-like object preserving attribute-style access
+    """
+    ov = COMPOSITE_PARAM_OVERRIDES.get((symbol, interval)) or {}
+    # Start with defaults as dict
+    try:
+        base = dict(defaults.__dict__)
+    except Exception:
+        base = {}
+
+    result: Dict[str, Any] = dict(base)
+    if "weights" in ov:
+        result["weights"] = _merge_weights(base.get("weights"), ov.get("weights"))
+    # Copy other scalar overrides
+    for k, v in ov.items():
+        if k == "weights":
+            continue
+        result[k] = v
+    return _to_namespace(result)

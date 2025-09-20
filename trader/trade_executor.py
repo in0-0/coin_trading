@@ -6,12 +6,17 @@ from typing import Dict, Any, Optional, Tuple
 from binance.client import Client
 
 from models import Position
+from .risk_manager import compute_initial_bracket
 from state_manager import StateManager
 from .symbol_rules import (
     get_symbol_filters,
     round_qty_to_step,
     validate_min_notional,
 )
+try:
+    from .trade_logger import TradeLogger  # optional at runtime
+except Exception:  # pragma: no cover
+    TradeLogger = None  # type: ignore
 
 
 class TradeExecutor:
@@ -27,6 +32,7 @@ class TradeExecutor:
         order_timeout_sec: int = 10,
         order_retry: int = 3,
         kill_switch: bool = False,
+        trade_logger: Optional["TradeLogger"] = None,
     ):
         self.client = client
         self.data_provider = data_provider
@@ -38,6 +44,7 @@ class TradeExecutor:
         self.order_timeout_sec = order_timeout_sec
         self.order_retry = order_retry
         self.kill_switch = kill_switch
+        self.trade_logger = trade_logger
 
     # --------------- Internal helpers ---------------
     def _generate_client_order_id(self, side: str, symbol: str) -> str:
@@ -142,7 +149,7 @@ class TradeExecutor:
             return 0.0
         return 0.0
 
-    def market_buy(self, symbol: str, usdt_to_spend: float, positions: Dict[str, Position], atr_multiplier: float, timeframe: str) -> None:
+    def market_buy(self, symbol: str, usdt_to_spend: float, positions: Dict[str, Position], atr_multiplier: float, timeframe: str, *, k_sl: float = 1.0, rr: float = 1.5, score_meta: Optional[Dict[str, float]] = None) -> None:
         try:
             if getattr(self, "kill_switch", False) and getattr(self, "execution_mode", "SIMULATED") == "LIVE":
                 self.notifier.send("⛔ Kill switch active. Skipping LIVE BUY order.")
@@ -176,6 +183,18 @@ class TradeExecutor:
                     polled = self._poll_order_until_done(symbol, resp)
                     if polled:
                         resp = polled
+                    # Final idempotent lookup by clientOrderId to catch fills after timeout
+                    if str(resp.get("status", "")).upper() != "FILLED":
+                        try:
+                            client_order_id = resp.get("clientOrderId") or resp.get("origClientOrderId")
+                            if client_order_id:
+                                orders = self.client.get_all_orders(symbol=symbol, limit=10)
+                                for o in orders or []:
+                                    if o.get("clientOrderId") == client_order_id and str(o.get("status", "")).upper() == "FILLED":
+                                        resp = o
+                                        break
+                        except Exception:
+                            pass
 
                 avg_price, executed_qty, total_fee, fee_asset = self._compute_fills(resp)
                 if executed_qty <= 0:
@@ -185,14 +204,38 @@ class TradeExecutor:
                 df = self.data_provider.get_and_update_klines(symbol, timeframe)
                 latest_close = float(df["Close"].iloc[-1])
                 atr = float(df["atr"].iloc[-1]) if "atr" in df.columns else latest_close * 0.02
-                stop_price = float(max(0.0, latest_close - atr * atr_multiplier))
-                position = Position(symbol=symbol, qty=executed_qty, entry_price=avg_price, stop_price=stop_price)
+                try:
+                    sl, tp = compute_initial_bracket(entry=avg_price, atr=atr, side="long", k_sl=float(k_sl), rr=float(rr))
+                except Exception:
+                    sl = float(max(0.0, latest_close - atr * atr_multiplier))
+                    tp = float(latest_close + atr * atr_multiplier)
+                # Log order/fill (LIVE)
+                try:
+                    if self.trade_logger is not None:
+                        self.trade_logger.log_order(symbol=symbol, side="BUY", price=avg_price, qty=executed_qty, quote_qty=None, client_order_id=client_order_id)
+                        self.trade_logger.log_fill(symbol=symbol, side="BUY", price=avg_price, qty=executed_qty, fee=total_fee, fee_asset=fee_asset, order_id=resp.get("orderId"), client_order_id=client_order_id)
+                except Exception:
+                    pass
+
+                position = Position(symbol=symbol, qty=executed_qty, entry_price=avg_price, stop_price=float(sl))
                 positions[symbol] = position
                 self.state_manager.save_positions(positions)
                 order_id = resp.get("orderId") or resp.get("clientOrderId") or client_order_id
                 fee_msg = f" | Fee: {total_fee:.6f} {fee_asset}" if total_fee > 0 and fee_asset else ""
+                meta = score_meta or {}
+                s = meta.get("score")
+                conf = meta.get("confidence")
+                kf = meta.get("kelly_f")
+                meta_parts = []
+                if isinstance(s, (int, float)):
+                    meta_parts.append(f"S={float(s):.3f}")
+                if isinstance(conf, (int, float)):
+                    meta_parts.append(f"Conf={float(conf):.2f}")
+                if isinstance(kf, (int, float)):
+                    meta_parts.append(f"f*={float(kf):.3f}")
+                meta_str = (" " + " ".join(meta_parts)) if meta_parts else ""
                 self.notifier.send(
-                    f"✅ BUY {symbol} (LIVE) id={order_id}\nAvg: ${avg_price:.4f} Qty: {executed_qty:.6f}{fee_msg}\nStop: ${position.stop_price:.4f}"
+                    f"✅ BUY {symbol} (LIVE) id={order_id}\nAvg: ${avg_price:.4f} Qty: {executed_qty:.6f}{fee_msg}\nSL: ${sl:.4f} TP: ${tp:.4f}{meta_str} ATR=${atr:.4f}"
                 )
                 return
 
@@ -201,15 +244,43 @@ class TradeExecutor:
             if price <= 0:
                 return
             qty = usdt_to_spend / price
+            # Log order for SIMULATED buy
+            try:
+                if self.trade_logger is not None:
+                    self.trade_logger.log_order(symbol=symbol, side="BUY", price=price, qty=qty, quote_qty=usdt_to_spend, client_order_id=None)
+            except Exception:
+                pass
             df = self.data_provider.get_and_update_klines(symbol, timeframe)
             latest_close = float(df["Close"].iloc[-1])
             atr = float(df["atr"].iloc[-1]) if "atr" in df.columns else latest_close * 0.02
-            stop_price = float(max(0.0, latest_close - atr * atr_multiplier))
-            position = Position(symbol=symbol, qty=qty, entry_price=latest_close, stop_price=stop_price)
+            try:
+                sl, tp = compute_initial_bracket(entry=latest_close, atr=atr, side="long", k_sl=float(k_sl), rr=float(rr))
+            except Exception:
+                sl = float(max(0.0, latest_close - atr * atr_multiplier))
+                tp = float(latest_close + atr * atr_multiplier)
+            position = Position(symbol=symbol, qty=qty, entry_price=latest_close, stop_price=float(sl))
             positions[symbol] = position
             self.state_manager.save_positions(positions)
+            # Log simulated fill right away
+            try:
+                if self.trade_logger is not None:
+                    self.trade_logger.log_fill(symbol=symbol, side="BUY", price=latest_close, qty=qty, fee=0.0, fee_asset=None, order_id=None, client_order_id=None)
+            except Exception:
+                pass
+            meta = score_meta or {}
+            s = meta.get("score")
+            conf = meta.get("confidence")
+            kf = meta.get("kelly_f")
+            meta_parts = []
+            if isinstance(s, (int, float)):
+                meta_parts.append(f"S={float(s):.3f}")
+            if isinstance(conf, (int, float)):
+                meta_parts.append(f"Conf={float(conf):.2f}")
+            if isinstance(kf, (int, float)):
+                meta_parts.append(f"f*={float(kf):.3f}")
+            meta_str = (" " + " ".join(meta_parts)) if meta_parts else ""
             self.notifier.send(
-                f"✅ BUY {symbol} @ ${position.entry_price:.4f}\nQty: {qty:.6f}\nStop: ${position.stop_price:.4f}"
+                f"✅ BUY {symbol} @ ${position.entry_price:.4f}\nQty: {qty:.6f}\nSL: ${sl:.4f} TP: ${tp:.4f}{meta_str} ATR=${atr:.4f}"
             )
         except Exception as exc:
             logging.exception(f"Failed to place BUY order for {symbol}: {exc}")
@@ -270,7 +341,13 @@ class TradeExecutor:
                     self.notifier.send(f"❌ LIVE SELL FAILED {symbol}: zero executed qty")
                     return
 
-                # Remove position and compute PnL (approx; adjust for fee in quote if applicable)
+                # Log fill and remove position and compute PnL (approx; adjust for fee in quote if applicable)
+                try:
+                    if self.trade_logger is not None:
+                        self.trade_logger.log_order(symbol=symbol, side="SELL", price=avg_price, qty=executed_qty, quote_qty=None, client_order_id=client_order_id)
+                        self.trade_logger.log_fill(symbol=symbol, side="SELL", price=avg_price, qty=executed_qty, fee=total_fee, fee_asset=fee_asset, order_id=resp.get("orderId"), client_order_id=client_order_id)
+                except Exception:
+                    pass
                 del positions[symbol]
                 self.state_manager.save_positions(positions)
                 pnl = (avg_price - position.entry_price) * min(position.qty, executed_qty)
@@ -280,13 +357,33 @@ class TradeExecutor:
                         pnl -= total_fee
                 order_id = resp.get("orderId") or resp.get("clientOrderId") or client_order_id
                 fee_msg = f" | Fee: {total_fee:.6f} {fee_asset}" if total_fee > 0 and fee_asset else ""
+                # Log trade summary
+                try:
+                    if self.trade_logger is not None:
+                        pnl_pct = (avg_price / position.entry_price - 1.0) if position.entry_price > 0 else 0.0
+                        self.trade_logger.log_trade(symbol=symbol, entry_price=position.entry_price, exit_price=avg_price, qty=min(position.qty, executed_qty), pnl=pnl, pnl_pct=pnl_pct)
+                except Exception:
+                    pass
                 self.notifier.send(f"🛑 SELL {symbol} (LIVE) id={order_id}\nAvg: ${avg_price:.4f} Qty: {executed_qty:.6f}{fee_msg}\nPnL: ${pnl:.2f}")
                 return
 
             price = self.data_provider.get_current_price(symbol)
+            # Log order for SIMULATED sell
+            try:
+                if self.trade_logger is not None:
+                    self.trade_logger.log_order(symbol=symbol, side="SELL", price=price, qty=position.qty, quote_qty=None, client_order_id=None)
+            except Exception:
+                pass
             del positions[symbol]
             self.state_manager.save_positions(positions)
             pnl = (price - position.entry_price) * position.qty
+            try:
+                if self.trade_logger is not None:
+                    self.trade_logger.log_fill(symbol=symbol, side="SELL", price=price, qty=position.qty, fee=0.0, fee_asset=None, order_id=None, client_order_id=None)
+                    pnl_pct = (price / position.entry_price - 1.0) if position.entry_price > 0 else 0.0
+                    self.trade_logger.log_trade(symbol=symbol, entry_price=position.entry_price, exit_price=price, qty=position.qty, pnl=pnl, pnl_pct=pnl_pct)
+            except Exception:
+                pass
             self.notifier.send(f"🛑 SELL {symbol} @ ${price:.4f}\nPnL: ${pnl:.2f}")
         except Exception as exc:
             logging.exception(f"Failed to place SELL order for {symbol}: {exc}")

@@ -4,5 +4,5 @@ live_trader.log
 .python_version
 
 # Lock failing tests during TDD until fixed
-!/tests/
-/tests/**
+# !/tests/
+# /tests/**

@@ -52,6 +52,15 @@ The project uses the following design patterns:
 -   **SYMBOLS** (comma-separated), **EXEC_INTERVAL_SECONDS**, **LOG_FILE**
  -   Execution (orders): **ORDER_EXECUTION** (`SIMULATED`|`LIVE`, default `SIMULATED`), **MAX_SLIPPAGE_BPS** (default `50`), **ORDER_TIMEOUT_SEC** (default `10`), **ORDER_RETRY** (default `3`), **ORDER_KILL_SWITCH** (`true`/`false`, default `false`)
 
+-   Strategy selection:
+    -   **STRATEGY_NAME**: `atr_trailing_stop` (default) or `composite_signal`
+    -   **EXECUTION_TIMEFRAME**: e.g., `5m`, `15m`, `1h`
+-   Composite strategy (Signal + Kelly) parameters:
+    -   **BRACKET_K_SL**: ATR multiplier for initial stop (default `1.5`)
+    -   **BRACKET_RR**: Risk/Reward ratio for take-profit (default `2.0`)
+    -   **KELLY_FMAX**: Max Kelly fraction cap (default `0.2`)
+    -   Per-symbol overrides are supported via `trader/symbol_rules.py` `COMPOSITE_PARAM_OVERRIDES`
+
 ## Commands
 
 -   Lint: `uv run ruff check .`
@@ -131,6 +140,79 @@ ORDER_KILL_SWITCH=false
 ### 주문 실행 모드
 - `ORDER_EXECUTION=SIMULATED` (기본): 현재와 동일한 시뮬레이션 기록만 수행
 - `ORDER_EXECUTION=LIVE`: 실제 Binance 주문 API를 호출할 준비를 합니다. 본 저장소는 순차 작업으로 점진적으로 라이브 주문 로직을 추가합니다. `ORDER_KILL_SWITCH=true`이면 모든 LIVE 주문이 차단됩니다.
+
+## Composite Strategy (Signal + Kelly)
+
+The composite strategy blends EMA, BB, RSI, MACD, Volume, and OBV into a single score S ∈ [-1,1].
+
+-   Enable composite strategy:
+
+    ```bash
+    export STRATEGY_NAME=composite_signal
+    export EXECUTION_TIMEFRAME=5m
+    # Optional bracket/kelly params
+    export BRACKET_K_SL=1.5
+    export BRACKET_RR=2.0
+    export KELLY_FMAX=0.2
+    ```
+
+-   Live trader behavior:
+    -   Uses `score()` for confidence → Kelly-based notional sizing
+    -   Computes initial bracket via ATR: SL = entry - k_sl·ATR, TP = entry + rr·k_sl·ATR
+    -   Buy notifications include: S, Confidence, f* (Kelly), ATR, SL/TP
+    -   Safety: slippage guard (`MAX_SLIPPAGE_BPS`), min notional, lot size rounding, kill switch
+
+-   Per-symbol parameter overrides:
+    -   Edit `trader/symbol_rules.py` `COMPOSITE_PARAM_OVERRIDES` or use `resolve_composite_params()` in code
+
+### Run Composite in TESTNET
+
+```bash
+export MODE=TESTNET
+export TESTNET_BINANCE_API_KEY=...; export TESTNET_BINANCE_SECRET_KEY=...
+export STRATEGY_NAME=composite_signal
+export EXECUTION_TIMEFRAME=5m
+export ORDER_EXECUTION=SIMULATED   # keep simulated until verified
+uv run python live_trader_gpt.py
+```
+
+### Run Composite in REAL (with guards)
+
+```bash
+export MODE=REAL
+export BINANCE_API_KEY=...; export BINANCE_SECRET_KEY=...
+export STRATEGY_NAME=composite_signal
+export EXECUTION_TIMEFRAME=5m
+export ORDER_EXECUTION=LIVE
+export ORDER_KILL_SWITCH=true     # start with kill switch ON for dry runs
+export MAX_SLIPPAGE_BPS=50
+uv run python live_trader_gpt.py
+```
+
+## Backtesting (Composite)
+
+Minimal backtesting is available for closed-candle, no-lookahead runs. It iterates with `df.iloc[:i]` windows and can account for fees/slippage. Example:
+
+```python
+from binance_data import BinanceData
+from strategies.composite_signal_strategy import CompositeSignalStrategy
+from types import SimpleNamespace
+from backtests.composite_backtest import run_backtest
+
+data = BinanceData(api_key=None, api_secret=None)
+df = data.get_and_update_klines("BTCUSDT", "5m")
+config = SimpleNamespace(ema_fast=12, ema_slow=26, bb_len=20, rsi_len=14,
+                         macd_fast=12, macd_slow=26, macd_signal=9,
+                         atr_len=14, k_atr_norm=1.0, vol_len=20, obv_span=20,
+                         max_score=1.0, buy_threshold=0.3, sell_threshold=-0.3)
+strategy = CompositeSignalStrategy(config)
+summary = run_backtest(df=df, strategy=strategy, warmup=50, fee_bps=10.0, slippage_bps=5.0)
+print(summary)  # {"iterations": ..., "trades": 0, "pnl": 0.0}
+```
+
+Notes:
+-   Use only closed candles; indicators call `dropna()` internally
+-   Fees/slippage are configurable (bps). Future updates will add PnL/trade logs under `backtest_logs/` and Kelly input (p, avg_win, avg_loss) aggregation
 
 ## CI
 
