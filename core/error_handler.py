@@ -168,6 +168,17 @@ class ErrorHandler:
             self.handle_error(e, context={"function": func.__name__})
             return False, None, e
 
+    def create_safe_context(self, log_level: str = "error", notify: bool = True):
+        """안전한 실행을 위한 context manager"""
+        @contextmanager
+        def safe_context():
+            try:
+                yield
+            except Exception as e:
+                self.handle_error(e, context={"function": "context_block"}, notify=notify, log_level=log_level)
+                raise
+        return safe_context()
+
     def create_safe_wrapper(self, log_level: str = "error", notify: bool = True):
         """
         안전 실행 래퍼 팩토리

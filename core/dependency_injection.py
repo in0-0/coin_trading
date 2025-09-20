@@ -8,6 +8,7 @@ import os
 from typing import Dict, Any, Optional, TypeVar, Type, Callable, Union
 from datetime import datetime
 from dataclasses import dataclass, field
+from dotenv import load_dotenv
 
 from .exceptions import ConfigurationError
 from .data_models import StrategyConfig
@@ -66,6 +67,7 @@ class TradingConfig:
     def from_env(cls) -> 'TradingConfig':
         """환경변수로부터 설정 로드"""
         config = cls()
+        load_dotenv()
 
         # API 설정
         config.mode = os.getenv("MODE", "TESTNET").upper()
@@ -82,6 +84,7 @@ class TradingConfig:
         else:
             config.api_key = os.getenv("BINANCE_API_KEY", "")
             config.api_secret = os.getenv("BINANCE_SECRET_KEY", "")
+        
 
         # 심볼 및 시간 설정
         symbols_str = os.getenv("SYMBOLS", "BTCUSDT,ETHUSDT,BNBUSDT,SOLUSDT,XRPUSDT")

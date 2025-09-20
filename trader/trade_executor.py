@@ -144,10 +144,12 @@ class TradeExecutor:
     def get_usdt_balance(self) -> float:
         try:
             info = self.client.get_account()
+
             for bal in info.get("balances", []):
                 if bal.get("asset") == "USDT":
                     return float(bal.get("free"))
         except Exception:
+            print("Error getting USDT balance")
             return 0.0
         return 0.0
 

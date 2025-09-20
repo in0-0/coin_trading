@@ -70,7 +70,15 @@ class StrategyFactory:
 
         # 전략 인스턴스 생성
         try:
-            return strategy_class(config=config, **kwargs)
+            # config에서 필요한 매개변수 추출
+            if 'config' in kwargs:
+                # config가 kwargs에 있으면 제거하고 개별 매개변수로 처리
+                config_obj = kwargs.pop('config')
+                strategy_kwargs = self._extract_strategy_kwargs(strategy_name, config_obj)
+                return strategy_class(**strategy_kwargs, **kwargs)
+            else:
+                # config가 kwargs에 없으면 기존 방식으로 처리
+                return strategy_class(config=config, **kwargs)
         except Exception as e:
             raise ConfigurationError(
                 f"Failed to create strategy {strategy_name}: {e}",
@@ -111,6 +119,21 @@ class StrategyFactory:
         config_dict = base_config.dict()
         config_dict.update(overrides)
         return StrategyConfig(**config_dict)
+
+    def _extract_strategy_kwargs(self, strategy_name: str, config: StrategyConfig) -> Dict[str, Any]:
+        """전략별로 필요한 매개변수 추출"""
+        if strategy_name == "atr_trailing_stop":
+            return {
+                'symbol': config.symbol,
+                'atr_multiplier': config.atr_multiplier,
+                'risk_per_trade': config.risk_per_trade
+            }
+        elif strategy_name == "composite_signal":
+            # CompositeSignalStrategy는 config 객체를 통째로 받음
+            return {'config': config}
+        else:
+            # 기본값
+            return {'symbol': config.symbol}
 
     def _validate_strategy_params(
         self,

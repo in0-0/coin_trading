@@ -7,6 +7,13 @@
 - 컬럼 네이밍은 `Open/High/Low/Close/Volume`(Title case)로 표준화합니다.
 - 전략은 신호만 판정하고, 포지션 CRUD는 트레이더/상태관리자가 담당합니다.
 
+### 변경 이력 (최근)
+- [x] [binance_data_improved.py](mdc:binance_data_improved.py): 에러 핸들링 `create_safe_context`로 교체하여 데코레이터 오용 수정
+- [x] [binance_data_improved.py](mdc:binance_data_improved.py): `MarketDataSummary` 생성 시 `datetime` 변환 명시로 타입 안정화
+- [x] [improved_live_trader.py](mdc:improved_live_trader.py): 포지션 로딩/타입을 `Position`으로 일관화, 임시 `PositionStateManager` 제거
+- [x] [improved_live_trader.py](mdc:improved_live_trader.py): Composite Kelly 사이징에서 안전한 `score` 호출/캐스팅 적용
+- [x] [improved_live_trader.py](mdc:improved_live_trader.py): 테스트넷 API 키 디버그 출력 제거
+
 ## 4) 실거래 주문 실행 (Enable Live Orders)
 
 - [ ] 통합 테스트: `Client.create_order` 모킹으로 엔트리/청산 플로우 검증, 규칙 위반 케이스 포함

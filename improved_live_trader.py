@@ -15,7 +15,7 @@ import time
 import signal
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Optional, Callable
+from typing import Dict, Optional, Callable, cast
 
 import requests
 import pandas as pd
@@ -26,14 +26,15 @@ from core.error_handler import ErrorHandler, get_global_error_handler
 from core.dependency_injection import get_config, configure_dependencies
 from core.exceptions import TradingError, ConfigurationError, DataError
 from core.data_models import StrategyConfig, MarketDataSummary
-from core.position_manager import PositionStateManager, PositionService
 from binance_data_improved import ImprovedBinanceData
 from improved_strategy_factory import StrategyFactory
 from state_manager import StateManager
 from models import Position, Signal
 from trader import Notifier, PositionSizer, TradeExecutor, TradeLogger
 from trader.position_sizer import kelly_position_size
-
+from strategies.base_strategy import Strategy
+from dotenv import load_dotenv
+load_dotenv()
 # 환경변수에서 설정 로드
 config = get_config()
 configure_dependencies(config)
@@ -75,7 +76,7 @@ class ImprovedLiveTrader:
         self.strategies = {
             symbol: self._create_strategy(symbol) for symbol in self.config.symbols
         }
-        self.positions: Dict[str, PositionStateManager] = self._load_positions()
+        self.positions: Dict[str, Position] = self._load_positions()
 
         self.logger.info(f"Improved LiveTrader initialized with {len(self.strategies)} strategies")
 
@@ -83,7 +84,7 @@ class ImprovedLiveTrader:
         """컴포넌트들 설정"""
         try:
             # Binance 클라이언트 설정
-            self.client = Client(self.config.api_key, self.config.api_secret)
+            self.client = Client(self.config.api_key, self.config.api_secret, testnet=(self.config.mode == "TESTNET"))
 
             # 데이터 제공자 설정
             self.data_provider = ImprovedBinanceData(
@@ -140,7 +141,7 @@ class ImprovedLiveTrader:
         except Exception as e:
             raise ConfigurationError(f"Failed to setup components: {e}") from e
 
-    def _create_strategy(self, symbol: str) -> 'Strategy':
+    def _create_strategy(self, symbol: str) -> Strategy:
         """심볼별 전략 생성"""
         try:
             factory = StrategyFactory()
@@ -154,17 +155,15 @@ class ImprovedLiveTrader:
         except Exception as e:
             raise ConfigurationError(f"Failed to create strategy for {symbol}: {e}") from e
 
-    def _load_positions(self) -> Dict[str, PositionStateManager]:
+    def _load_positions(self) -> Dict[str, Position]:
         """저장된 포지션들을 로드"""
         try:
-            saved_positions = self.state_manager.load_positions()
-            positions = {}
+            saved_positions = self.state_manager.load_positions()  # dict[str, Position]
+            positions: Dict[str, Position] = {}
 
-            for symbol, pos_dict in saved_positions.items():
-                if symbol in self.config.symbols:
-                    # 기존 Position 객체를 PositionStateManager로 변환
-                    manager = PositionStateManager.from_dict(pos_dict, symbol)
-                    positions[symbol] = manager
+            for symbol, pos in saved_positions.items():
+                if symbol in self.config.symbols and isinstance(pos, Position):
+                    positions[symbol] = pos
 
             self.logger.info(f"Loaded {len(positions)} positions from state file")
             return positions
@@ -183,7 +182,7 @@ class ImprovedLiveTrader:
 
         while self._running:
             try:
-                with self.error_handler.create_safe_wrapper(log_level="warning")():
+                with self.error_handler.create_safe_context(log_level="warning"):
                     self._check_stops()
                     self._find_and_execute_entries()
                     time.sleep(self.config.execution_interval)
@@ -271,16 +270,6 @@ class ImprovedLiveTrader:
 
             self.logger.info(f"Executing BUY for {symbol}: {spend_amount}")
 
-            # 개선된 PositionStateManager 생성
-            position_manager = PositionService().create_position(
-                symbol=symbol,
-                quantity=0,  # 실제 수량은 주문 실행 후 설정
-                entry_price=0,  # 실제 가격은 주문 실행 후 설정
-                stop_price=0   # 실제 스탑 가격은 주문 실행 후 설정
-            )
-
-            self.positions[symbol] = position_manager
-
             # 주문 실행 (실제 주문 로직은 executor에 위임)
             self.executor.market_buy(
                 symbol=symbol,
@@ -307,27 +296,32 @@ class ImprovedLiveTrader:
             if not strategy:
                 return None
 
-            if self.config.strategy_name == "composite_signal" and hasattr(strategy, 'score'):
-                # Kelly 기반 포지션 사이징
-                score = float(getattr(strategy, "score", lambda x: 0.0)(market_data))
-                max_score = float(getattr(getattr(strategy, "cfg", None), "max_score", 1.0))
+            if self.config.strategy_name == "composite_signal":
+                # Kelly 기반 포지션 사이징 (Composite 전략에 한함)
+                score_fn_obj = getattr(strategy, "score", None)
+                if callable(score_fn_obj):
+                    score_fn = cast(Callable[[pd.DataFrame], float], score_fn_obj)
+                    score = float(score_fn(market_data))
+                    max_score = float(getattr(getattr(strategy, "cfg", None), "max_score", 1.0))
 
-                win_rate = 0.5
-                avg_win = 1.0
-                avg_loss = 1.0
-                f_max = float(os.getenv("KELLY_FMAX", "0.2"))
+                    win_rate = 0.5
+                    avg_win = 1.0
+                    avg_loss = 1.0
+                    f_max = float(os.getenv("KELLY_FMAX", "0.2"))
 
-                return kelly_position_size(
-                    capital=usdt_balance,
-                    win_rate=win_rate,
-                    avg_win=avg_win,
-                    avg_loss=avg_loss,
-                    score=score,
-                    max_score=max_score,
-                    f_max=f_max,
-                    pos_min=0.0,
-                    pos_max=self.config.max_symbol_weight,
-                )
+                    return kelly_position_size(
+                        capital=usdt_balance,
+                        win_rate=win_rate,
+                        avg_win=avg_win,
+                        avg_loss=avg_loss,
+                        score=score,
+                        max_score=max_score,
+                        f_max=f_max,
+                        pos_min=0.0,
+                        pos_max=self.config.max_symbol_weight,
+                    )
+                # score 함수가 없으면 기본 방식으로 폴백
+                return self.position_sizer.compute_spend_amount(usdt_balance, market_data)
             else:
                 # 기존 방식
                 return self.position_sizer.compute_spend_amount(usdt_balance, market_data)
@@ -344,10 +338,13 @@ class ImprovedLiveTrader:
         """스코어 메타 정보 수집"""
         try:
             strategy = self.strategies.get(symbol)
-            if not strategy or not hasattr(strategy, 'score'):
+            strategy = self.strategies.get(symbol)
+            score_fn_obj = getattr(strategy, 'score', None) if strategy else None
+            if not callable(score_fn_obj):
                 return None
 
-            score = float(strategy.score(market_data))
+            score_fn = cast(Callable[[pd.DataFrame], float], score_fn_obj)
+            score = float(score_fn(market_data))
             max_score = float(getattr(getattr(strategy, "cfg", None), "max_score", 1.0))
             confidence = max(0.0, min(1.0, abs(score) / max(1e-9, max_score)))
 
@@ -360,7 +357,7 @@ class ImprovedLiveTrader:
         except Exception:
             return None
 
-    def _place_sell_order(self, symbol: str, position: Optional[PositionStateManager] = None):
+    def _place_sell_order(self, symbol: str, position: Optional[Position] = None):
         """매도 주문 실행"""
         try:
             self.executor.market_sell(symbol, self.positions)
@@ -418,7 +415,7 @@ class ImprovedLiveTrader:
 
             # 현재 활성 포지션들을 딕셔너리로 변환
             current_positions = {
-                symbol: pos.to_dict()
+                symbol: pos
                 for symbol, pos in self.positions.items()
                 if pos.status == "ACTIVE"
             }

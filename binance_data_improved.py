@@ -7,7 +7,7 @@ Pydantic 모델을 활용한 강력한 데이터 검증과 타입 안정성을 �
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Final, List, Optional, Dict, Any
+from typing import Final, List, Optional, Dict, Any, cast
 
 import pandas as pd
 from binance.client import Client
@@ -84,7 +84,7 @@ class ImprovedBinanceData:
         Raises:
             DataError: 데이터 처리 중 오류 발생 시
         """
-        with self.error_handler.create_safe_wrapper()():
+        with self.error_handler.create_safe_context(log_level="warning", notify=False):
             return self._get_and_update_klines_safe(symbol, interval, initial_load_days)
 
     def _get_and_update_klines_safe(
@@ -243,9 +243,10 @@ class ImprovedBinanceData:
     def _ensure_dataframe_columns(self, df: Optional[pd.DataFrame]) -> pd.DataFrame:
         """DataFrame이 TARGET_COLUMNS를 포함하도록 보장"""
         if df is not None:
-            return df[TARGET_COLUMNS].copy()
+            # Ensure DataFrame slice and type for static checkers
+            return cast(pd.DataFrame, df.loc[:, TARGET_COLUMNS].copy())
         else:
-            return pd.DataFrame(columns=TARGET_COLUMNS)
+            return pd.DataFrame(columns=pd.Index(TARGET_COLUMNS))
 
     def get_current_price(self, symbol: str) -> float:
         """
@@ -260,7 +261,7 @@ class ImprovedBinanceData:
         Raises:
             DataError: 가격 조회 실패 시
         """
-        with self.error_handler.create_safe_wrapper()():
+        with self.error_handler.create_safe_context(log_level="warning", notify=False):
             return self._get_current_price_safe(symbol)
 
     def _get_current_price_safe(self, symbol: str) -> float:
@@ -301,7 +302,7 @@ class ImprovedBinanceData:
         Returns:
             시장 데이터 요약
         """
-        with self.error_handler.create_safe_wrapper()():
+        with self.error_handler.create_safe_context(log_level="warning", notify=False):
             return self._get_market_summary_safe(symbol, interval)
 
     def _get_market_summary_safe(self, symbol: str, interval: str) -> MarketDataSummary:
@@ -318,12 +319,15 @@ class ImprovedBinanceData:
 
         latest_price = self.get_current_price(symbol)
 
+        start_dt = pd.to_datetime(df["Open time"].min()).to_pydatetime()
+        end_dt = pd.to_datetime(df["Open time"].max()).to_pydatetime()
+
         return MarketDataSummary(
             symbol=symbol,
             timeframe=interval,
             data_points=len(df),
-            start_time=df["Open time"].min(),
-            end_time=df["Open time"].max(),
+            start_time=start_dt,
+            end_time=end_dt,
             latest_price=latest_price,
             volume_24h=self._calculate_24h_volume(df)
         )
