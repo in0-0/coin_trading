@@ -111,3 +111,4 @@ dmypy.json
 backtest_logs/
 data/
 live_logs/
+live_positions.json

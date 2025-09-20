@@ -186,3 +186,78 @@
 - [x] LiveTrader에서 환경변수로 제어(`LIVE_LOG_DATE_PARTITION`, `LOG_TZ`, `LOG_DATE_FMT`)
 - [x] env.example/README 문서화 및 예시 경로 갱신
 - [x] 테스트 추가: `tests/test_trade_logger_date_partition.py`
+
+## 11) 코드 품질 및 구조 개선 (Code Quality & Architecture Refactoring)
+
+### 11.1) `live_trader_gpt.py` 모듈화 및 복잡성 해소
+- [ ] **높은 우선순위**: LiveTrader 클래스 분리 및 모듈화
+    - [ ] `LiveTrader` 클래스를 더 작은 단위로 분리 (OrderManager, PositionManager 등)
+    - [ ] Template Method 패턴을 활용한 LIVE/SIMULATED 모드 중복 제거
+    - [ ] 긴 메서드들(`market_buy`, `market_sell`)을 별도 클래스로 분리
+    - [x] 설정 관리를 위한 Configuration 클래스 도입
+
+- [ ] **중간 우선순위**: 에러 처리 패턴 통일
+    - [x] 커스텀 예외 클래스 정의 (`TradingError`, `OrderError` 등)
+    - [ ] 일관된 에러 처리 패턴 적용
+    - [ ] 구체적인 예외 유형별 처리 로직 개선
+
+- [ ] **낮은 우선순위**: 코드 문서화 개선
+    - [ ] 복잡한 로직들에 대한 docstring 추가
+    - [ ] 메서드별 파라미터 및 반환값 명확화
+    - [ ] 아키텍처 의사결정 문서화
+
+### 11.2) Signal 및 Position 모델 개선
+- [x] **높은 우선순위**: Signal Enum의 과도한 확장 해결
+    - [x] 새로운 `TradingSignal` 클래스 구현으로 상태와 액션 분리
+    - [x] 기존 `Signal` Enum과의 호환성 유지
+    - [x] 타입 안정성과 확장성 개선
+
+- [ ] **중간 우선순위**: Position 클래스의 책임 분산
+    - [ ] 너무 많은 책임을 가진 `Position` 클래스를 분리
+    - [ ] `PositionLeg`와 `Position`의 관계 개선
+    - [ ] 계산 로직들을 별도 서비스 클래스로 분리
+
+### 11.3) 설정 관리 및 상수화
+- [x] **높은 우선순위**: 매직 넘버 및 하드코딩된 값들 제거
+    - [x] `TradingConstants` 클래스 생성으로 모든 상수 중앙화
+    - [x] Pydantic을 활용한 설정 검증
+    - [x] Configuration 클래스로 환경변수와 하드코딩 혼재 해결
+
+### 11.4) 의존성 주입 및 테스트 용이성 개선
+- [ ] **중간 우선순위**: 의존성 주입 패턴 개선
+    - [ ] `ATRTrailingStopStrategy`의 생성자 의존성 간소화
+    - [ ] Factory 패턴을 활용한 객체 생성 중앙화
+    - [ ] 테스트 더블의 일관성 향상
+
+- [ ] **낮은 우선순위**: 테스트 코드 품질 향상
+    - [ ] 테스트 데이터 팩토리 활용
+    - [ ] 모킹 전략의 일관성 개선
+    - [ ] 통합 테스트 커버리지 확대
+
+### 11.5) 데이터 검증 및 타입 안정성
+- [ ] **중간 우선순위**: 입력 데이터 검증 강화
+    - [ ] `binance_data.py`의 데이터 검증 로직 개선
+    - [ ] Pydantic 모델을 활용한 데이터 검증
+    - [ ] API 응답 데이터의 타입 안정성 보장
+
+- [ ] **낮은 우선순위**: 타입 힌트 완성도 향상
+    - [ ] 누락된 타입 힌트 추가
+    - [ ] 복잡한 타입 표현식 개선
+    - [ ] mypy를 활용한 정적 타입 검사 도입
+
+### 완료된 개선사항들:
+✅ **Configuration 클래스** - 환경변수와 설정 값들을 Pydantic으로 중앙화
+✅ **TradingConstants 클래스** - 모든 매직 넘버와 하드코딩된 값들을 상수로 정의
+✅ **커스텀 예외 클래스들** - `TradingError`, `OrderError`, `ConfigurationError` 등 정의
+✅ **Signal 구조 개선** - `TradingSignal` 클래스로 상태와 액션 명확히 분리, 기존 호환성 유지
+
+### 구현 우선순위 (업데이트됨):
+1. **진행 중**: `live_trader_gpt.py` 모듈화 (높은 우선순위)
+2. **다음 단계**: 의존성 주입 패턴 개선 (중간 우선순위)
+3. **유지보수 중**: 나머지 개선사항들
+
+### TDD 접근법:
+- 각 개선사항마다 먼저 실패하는 테스트 작성
+- 최소 구현으로 테스트 통과
+- 리팩토링 단계에서 코드 구조 개선
+- 기존 기능의 호환성 지속 보장
