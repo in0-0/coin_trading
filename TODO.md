@@ -195,8 +195,11 @@
     - [x] `TradingEngine` 클래스 구현 - 메인 거래 로직 조율
     - [x] Configuration 의존성 주입으로 설정 분리
     - [x] 컴포넌트별 책임 명확히 분리
-    - [ ] Template Method 패턴을 활용한 LIVE/SIMULATED 모드 중복 제거
-    - [ ] 긴 메서드들(`market_buy`, `market_sell`)을 별도 클래스로 분리
+    - [x] Template Method 패턴을 활용한 LIVE/SIMULATED 모드 중복 제거
+    - [x] `OrderExecutionTemplate` 추상 클래스 구현 - 공통 알고리즘 정의
+    - [x] `LiveOrderExecutor` 클래스 구현 - 실제 API 호출
+    - [x] `SimulatedOrderExecutor` 클래스 구현 - 시뮬레이션 모드
+    - [x] 코드 중복 제거 및 확장성 개선
 
 - [ ] **중간 우선순위**: 에러 처리 패턴 통일
     - [x] 커스텀 예외 클래스 정의 (`TradingError`, `OrderError` 등)
@@ -255,6 +258,7 @@
 ✅ **OrderManager 클래스** - 주문 실행과 검증을 담당하는 모듈화된 컴포넌트
 ✅ **TradingEngine 클래스** - 메인 거래 로직을 조율하는 모듈화된 엔진
 ✅ **LiveTrader 모듈화** - 책임 분산과 테스트 용이성 개선
+✅ **Template Method 패턴 적용** - LIVE/SIMULATED 모드 코드 중복 제거 및 확장성 개선
 
 ### 구현 우선순위 (업데이트됨):
 1. **진행 중**: `live_trader_gpt.py` 모듈화 (높은 우선순위)
