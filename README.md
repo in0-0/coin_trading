@@ -9,14 +9,24 @@ The project is structured as follows:
 -   `live_trader_gpt.py`: The main entry point for the live trading bot.
 -   `binance_data.py`: Handles data fetching from the Binance API.
 -   `state_manager.py`: Manages the state of the trading bot, including open positions.
--   `models.py`: Contains the data models for the application.
+-   `models.py`: Contains the data models for the application (Signal, Position, PositionAction, PositionLeg).
 -   `strategies/`: This directory contains the different trading strategies.
-    -   `base_strategy.py`: Defines the interface for all strategies.
-    -   `atr_trailing_stop_strategy.py`: A concrete implementation of a trading strategy.
+    -   `base_strategy.py`: Defines the interface for all strategies (supports get_position_action for advanced features).
+    -   `atr_trailing_stop_strategy.py`: Advanced strategy with pyramiding, trailing stops, and partial exits.
 -   `data_providers/`: Strategy pattern for fetching klines (default: `binance_klines_strategy.py`).
--   `trader/`: Trader components used by the live trader (`notifier.py`, `position_sizer.py`, `trade_executor.py`).
+-   `trader/`: Trader components used by the live trader.
+    -   `notifier.py`: Telegram notifications.
+    -   `position_sizer.py`: Position sizing with Kelly criterion.
+    -   `trade_executor.py`: Order execution with slippage guards and retries.
+    -   `trade_logger.py`: File-based logging for orders, fills, trades, and final performance.
+    -   `performance_calculator.py`: Calculates comprehensive trading performance metrics.
+    -   `position_manager.py`: Pyramiding and averaging down strategies.
+    -   `trailing_stop_manager.py`: ATR-based dynamic trailing stops.
+    -   `partial_exit_manager.py`: Progressive profit taking with partial exits.
+    -   `risk_manager.py`: Initial bracket calculation (SL/TP).
+    -   `symbol_rules.py`: Symbol-specific parameter overrides.
 -   `strategy_factory.py`: A factory for creating strategy objects.
--   `tests/`: Contains unit tests for the project.
+-   `tests/`: Contains comprehensive unit tests (17+ tests covering advanced features).
 -   `data/`: Contains historical market data.
 -   `backtest_logs/`: Backtest logs and outputs.
 -   `_archive/`: Contains old files that are no longer in use.
@@ -142,6 +152,60 @@ ORDER_KILL_SWITCH=false
 - `ORDER_EXECUTION=SIMULATED` (기본): 현재와 동일한 시뮬레이션 기록만 수행
 - `ORDER_EXECUTION=LIVE`: 실제 Binance 주문 API를 호출할 준비를 합니다. 본 저장소는 순차 작업으로 점진적으로 라이브 주문 로직을 추가합니다. `ORDER_KILL_SWITCH=true`이면 모든 LIVE 주문이 차단됩니다.
 
+## Advanced Position Management (고급 포지션 관리)
+
+이 시스템은 기본적인 매수/매도 이상의 고급 포지션 관리 기능을 제공합니다:
+
+### 주요 기능
+
+#### 1. 불타기 (Pyramiding)
+- **조건**: 3% 이상 수익 시 활성화
+- **횟수**: 최대 3회까지 추가 매수 가능
+- **간격**: 추가 매수 간 1시간 최소 간격
+- **위험 관리**: 각 레그별 사이즈 점진적 조정
+
+#### 2. 물타기 (Averaging Down)
+- **조건**: -5% 이상 손실 시 활성화
+- **횟수**: 최대 2회까지 추가 매수 가능
+- **목적**: 평단가 낮춰 손실 완화
+- **위험 관리**: 최대 손실 제한
+
+#### 3. 트레일링 스탑 (Trailing Stop)
+- **활성화**: 2% 이상 수익 시 자동 활성화
+- **방식**: ATR 기반 동적 계산
+- **특징**: 최고가 업데이트 시 스탑 상향 조정
+- **보호**: 손실 구간에서는 작동하지 않음
+
+#### 4. 부분 청산 (Partial Exits)
+- **레벨**: 5%, 10%, 15%, 20% 수익 구간
+- **비율**: 각 레벨별 30-40% 부분 청산
+- **중복 방지**: 한 번 청산한 레벨은 재실행하지 않음
+- **목적**: 단계적 이익 실현
+
+### 작동 방식
+
+1. **전략 분석**: ATRTrailingStopStrategy가 시장 데이터 분석
+2. **액션 결정**: 적절한 포지션 관리 액션 선택
+3. **실행**: LiveTrader가 액션 처리 → 실제 주문 실행
+4. **상태 관리**: 모든 변경사항 저장 및 실시간 알림
+
+### 안전성
+
+- **위험 우선**: 모든 기능은 안전장치와 함께 구현
+- **점진적 위험**: 불타기/물타기 한도 설정
+- **실시간 모니터링**: 모든 액션에 대한 로깅 및 알림
+- **기존 호환성**: 모든 기존 기능 완벽 호환 유지
+
+### 활성화
+
+기본적으로 모든 고급 기능이 활성화되어 있습니다. ATRTrailingStopStrategy를 사용하는 경우:
+
+```bash
+export STRATEGY_NAME=atr_trailing_stop
+export EXECUTION_TIMEFRAME=5m
+uv run python live_trader_gpt.py
+```
+
 ## Composite Strategy (Signal + Kelly)
 
 The composite strategy blends EMA, BB, RSI, MACD, Volume, and OBV into a single score S ∈ [-1,1].
@@ -225,6 +289,35 @@ Notes:
     -   `fills.csv` (ts, mode, symbol, side, price, qty, fee, fee_asset, order_id, client_order_id)
     -   `trades.csv` (ts, mode, symbol, entry_price, exit_price, qty, pnl, pnl_pct)
     -   `events.log` (ts, mode, message)
+    -   `final_performance.json` (comprehensive performance metrics on shutdown)
+
+### Final Performance Report (`final_performance.json`)
+
+Generated automatically when the trader shuts down (SIGINT/SIGTERM or normal exit). Contains comprehensive performance metrics:
+
+-   **Portfolio metrics**: Final equity, total return %, realized/unrealized PnL
+-   **Trade statistics**: Total trades, win rate, profit factor, average win/loss
+-   **Risk metrics**: Sharpe ratio, maximum drawdown
+-   **Position info**: Open positions count and symbols
+-   **Session info**: Timestamp, mode (SIMULATED/LIVE), log directory
+
+Example structure:
+```json
+{
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "mode": "SIMULATED",
+  "final_equity": 1050.0,
+  "total_return_pct": 5.0,
+  "total_trades": 25,
+  "win_rate": 64.0,
+  "profit_factor": 1.8,
+  "sharpe_ratio": 1.2,
+  "open_positions_count": 0,
+  "log_directory": "live_logs/20240115_103000_atr_trailing_stop"
+}
+```
+
+This enables tracking strategy performance over time and comparing different runs.
 
 Partial fills: multiple rows appear in `fills.csv` with the same `client_order_id`. Aggregated average price and total quantity are reflected in notifications and position state.
 

@@ -115,7 +115,47 @@
     - [x] 실행 예시 및 보호장치 주의사항 추가
     - [x] [README_ko.md](mdc:README_ko.md) 추가: 한국어 README 생성
 
-## 6) 파일 기반 로깅 및 백테스트 산출물
+## 7) 고급 포지션 관리 기능 (Advanced Position Management)
+
+### Phase 1: Position 모델 확장 + Signal 체계 개선
+- [x] Signal enum 확장: `BUY_NEW`, `BUY_ADD`, `SELL_PARTIAL`, `SELL_ALL`, `UPDATE_TRAIL`
+- [x] PositionAction dataclass 추가
+- [x] Position 클래스 대폭 확장: `legs`, `partial_exits`, `trailing_stop_price`, `highest_price`
+- [x] strategies/base_strategy.py에 `get_position_action()` 메소드 추가
+- [x] live_trader_gpt.py에 포지션 액션 처리 프레임워크 추가
+- [x] 모든 테스트 통과 및 기존 호환성 유지
+
+### Phase 2: 불타기/물타기 로직 추가
+- [x] [trader/position_manager.py](mdc:trader/position_manager.py) 구현: 불타기(Pyramiding)와 물타기(Averaging Down) 전략
+- [x] 불타기: 3% 수익 시 추가 매수 (최대 3회, 시간 간격 제한)
+- [x] 물타기: -5% 손실 시 추가 매수 (최대 2회, 위험 관리)
+- [x] ATRTrailingStopStrategy에 PositionManager 통합
+- [x] live_trader_gpt.py에서 `BUY_ADD` 액션 처리 로직 구현
+
+### Phase 3: 트레일링 스탑 상향 갱신
+- [x] [trader/trailing_stop_manager.py](mdc:trader/trailing_stop_manager.py) 구현: ATR 기반 동적 트레일링 스탑
+- [x] 2% 수익 시 트레일링 활성화, 최고가 업데이트 시 스탑 상향
+- [x] ATRTrailingStopStrategy에 TrailingStopManager 통합
+- [x] live_trader_gpt.py에서 `UPDATE_TRAIL` 액션 처리 로직 구현
+
+### Phase 4: 부분 청산 로직
+- [x] [trader/partial_exit_manager.py](mdc:trader/partial_exit_manager.py) 구현: 단계별 이익 실현
+- [x] 5%, 10%, 15%, 20% 수익 구간별 부분 청산 (30-40% 비율)
+- [x] 부분 청산 이력 관리 및 중복 방지
+- [x] ATRTrailingStopStrategy에 PartialExitManager 통합
+- [x] live_trader_gpt.py에서 `SELL_PARTIAL` 액션 처리 로직 구현
+
+### 새로운 모듈들:
+- [x] [trader/position_manager.py](mdc:trader/position_manager.py): 불타기/물타기 전략 관리
+- [x] [trader/trailing_stop_manager.py](mdc:trader/trailing_stop_manager.py): ATR 기반 트레일링 스탑
+- [x] [trader/partial_exit_manager.py](mdc:trader/partial_exit_manager.py): 단계별 부분 청산
+- [x] [strategies/base_strategy.py](mdc:strategies/base_strategy.py): PositionAction 지원 추가
+- [x] [strategies/atr_trailing_stop_strategy.py](mdc:strategies/atr_trailing_stop_strategy.py): 고급 포지션 관리 통합
+
+### 새로운 테스트들:
+- [x] [tests/test_strategy.py](mdc:tests/test_strategy.py): Phase 1-4 기능 검증 (총 17개 테스트)
+
+## 8) 파일 기반 로깅 및 백테스트 산출물
 
 - [x] 공용 로거 추가: [trader/trade_logger.py](mdc:trader/trade_logger.py)
 - [x] 실거래 통합: [trader/trade_executor.py](mdc:trader/trade_executor.py)에서 SIMULATED/LIVE 공통 주문/체결/트레이드 기록
@@ -123,3 +163,19 @@
 - [x] 백테스트 출력: [backtests/composite_backtest.py](mdc:backtests/composite_backtest.py) `run_backtest(..., write_logs=True, log_dir, run_id)` 지원으로 `summary.json`/`equity.csv`/`trades.csv` 생성
 - [x] 테스트 추가: [tests/test_trade_logger.py](mdc:tests/test_trade_logger.py), [tests/test_trade_executor_logging.py](mdc:tests/test_trade_executor_logging.py), [tests/test_backtest_logging.py](mdc:tests/test_backtest_logging.py)
 - [x] 문서화: `README.md`에 로그 파일 스키마/경로, 환경변수(`LIVE_LOG_DIR`, `RUN_ID`), 백테스트 산출물 설명 추가
+
+## 9) 프로그램 종료 시 최종 수익률 기록 기능
+
+- [x] 성과 계산 모듈 구현: [trader/performance_calculator.py](mdc:trader/performance_calculator.py) - 전체 포트폴리오 성과(실현/미실현 손익, 승률, 샤프 비율 등) 자동 계산
+- [x] TradeLogger 확장: [trader/trade_logger.py](mdc:trader/trade_logger.py)에 `save_final_performance()` 메서드 추가로 `final_performance.json` 파일 생성
+- [x] LiveTrader 종료 처리 개선: [live_trader_gpt.py](mdc:live_trader_gpt.py) `_shutdown()` 메서드에 최종 성과 자동 계산 및 저장 로직 추가
+- [x] 단위 테스트: [tests/test_performance_calculator.py](mdc:tests/test_performance_calculator.py) - 9개 테스트 케이스로 모든 시나리오 검증 (빈 데이터, 정상 데이터, 오류 처리 등)
+- [x] 문서화: [README.md](mdc:README.md)에 `final_performance.json` 파일 스키마, 예시 데이터, 해석 가이드 추가
+- [x] 통합 검증: 실제 TradeLogger와 연동하여 `trades.csv` 기반 성과 계산 및 `final_performance.json` 파일 생성 확인
+
+### 주요 특징:
+- **자동 실행**: 프로그램 종료(SIGINT/SIGTERM) 시 모든 포지션 정리 후 자동으로 성과 계산
+- **포괄적 지표**: 20개 이상의 성과 지표 (수익률, 승률, 프로핏 팩터, 샤프 비율, 최대 낙폭 등)
+- **안전성**: 오류 발생 시 빈 결과 반환으로 시스템 안정성 보장
+- **실시간 알림**: 텔레그램으로 최종 성과 리포트 자동 전송
+- **파일 저장**: `live_logs/{RUN_ID}/final_performance.json`에 JSON 형식으로 영구 저장

@@ -2,7 +2,7 @@ import csv
 import json
 import os
 import time
-from typing import Dict, Iterable, Optional
+from collections.abc import Iterable
 
 
 class TradeLogger:
@@ -18,7 +18,7 @@ class TradeLogger:
         os.makedirs(self.base_dir, exist_ok=True)
 
     # -------------- public API --------------
-    def log_order(self, *, symbol: str, side: str, price: float, qty: float, quote_qty: Optional[float] = None, client_order_id: Optional[str] = None) -> None:
+    def log_order(self, *, symbol: str, side: str, price: float, qty: float, quote_qty: float | None = None, client_order_id: str | None = None) -> None:
         self._write_csv_row(
             filename="orders.csv",
             headers=("ts", "mode", "symbol", "side", "price", "qty", "quote_qty", "client_order_id"),
@@ -34,7 +34,7 @@ class TradeLogger:
             },
         )
 
-    def log_fill(self, *, symbol: str, side: str, price: float, qty: float, fee: float = 0.0, fee_asset: Optional[str] = None, order_id: Optional[str] = None, client_order_id: Optional[str] = None) -> None:
+    def log_fill(self, *, symbol: str, side: str, price: float, qty: float, fee: float = 0.0, fee_asset: str | None = None, order_id: str | None = None, client_order_id: str | None = None) -> None:
         self._write_csv_row(
             filename="fills.csv",
             headers=("ts", "mode", "symbol", "side", "price", "qty", "fee", "fee_asset", "order_id", "client_order_id"),
@@ -84,13 +84,27 @@ class TradeLogger:
         with open(path, "a", encoding="utf-8") as f:
             f.write(f"{int(self._ts_ms())}\t{self.mode}\t{message}\n")
 
-    def save_summary(self, summary: Dict) -> None:
+    def save_summary(self, summary: dict) -> None:
         path = os.path.join(self.base_dir, "summary.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
 
+    def save_final_performance(self, performance_data: dict) -> None:
+        """최종 성과 데이터를 JSON 파일로 저장합니다."""
+        path = os.path.join(self.base_dir, "final_performance.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(performance_data, f, indent=2)
+
+        # 로그에도 기록
+        total_return = performance_data.get('total_return_pct', 0.0)
+        total_trades = performance_data.get('total_trades', 0)
+        win_rate = performance_data.get('win_rate', 0.0)
+        self.log_event(f"Final performance saved: {total_return:.1f}% return, "
+                      f"{total_trades} trades, "
+                      f"Win rate: {win_rate:.1f}%")
+
     # -------------- internals --------------
-    def _write_csv_row(self, *, filename: str, headers: Iterable[str], row: Dict) -> None:
+    def _write_csv_row(self, *, filename: str, headers: Iterable[str], row: dict) -> None:
         path = os.path.join(self.base_dir, filename)
         file_exists = os.path.exists(path)
         with open(path, "a", newline="", encoding="utf-8") as f:
