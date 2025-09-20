@@ -1,7 +1,8 @@
 import os
 import tempfile
-import pandas as pd
 from importlib import import_module
+
+import pandas as pd
 
 from trader.trade_executor import TradeExecutor
 
@@ -36,7 +37,7 @@ def test_trade_executor_writes_logs_on_simulated_buy_and_sell():
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             mod = import_module("trader.trade_logger")
-            TradeLogger = getattr(mod, "TradeLogger")
+            TradeLogger = mod.TradeLogger
         except Exception:
             assert False, "TradeLogger not implemented yet"
 

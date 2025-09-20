@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 
-from trader.trade_executor import TradeExecutor
 from models import Position
+from trader.trade_executor import TradeExecutor
 
 
 class DummyNotifier:

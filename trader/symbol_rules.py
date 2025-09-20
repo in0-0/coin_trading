@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 
 @dataclass
@@ -20,7 +20,7 @@ def _parse_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def get_symbol_filters(client: Any, symbol: str, cache: Optional[Dict[str, SymbolFilters]] = None) -> SymbolFilters:
+def get_symbol_filters(client: Any, symbol: str, cache: dict[str, SymbolFilters] | None = None) -> SymbolFilters:
     if cache is not None and symbol in cache:
         return cache[symbol]
 
@@ -78,10 +78,10 @@ def validate_min_notional(price: float, qty: float, min_notional: float) -> bool
 # In-memory overrides map. Keyed by (symbol, interval). Values are shallow dicts
 # that may include nested "weights" dicts. This is intentionally minimal and can
 # be later extended to load from TOML under commands/sc/.
-COMPOSITE_PARAM_OVERRIDES: Dict[Tuple[str, str], Dict[str, Any]] = {}
+COMPOSITE_PARAM_OVERRIDES: dict[tuple[str, str], dict[str, Any]] = {}
 
 
-def _to_namespace(d: Dict[str, Any]) -> SimpleNamespace:
+def _to_namespace(d: dict[str, Any]) -> SimpleNamespace:
     ns = SimpleNamespace()
     for k, v in d.items():
         setattr(ns, k, v)
@@ -93,7 +93,7 @@ def _merge_weights(default_w: Any, override_w: Any) -> Any:
     if override_w is None:
         return default_w
     # Convert both to dicts for merging
-    def as_dict(obj: Any) -> Dict[str, Any]:
+    def as_dict(obj: Any) -> dict[str, Any]:
         if isinstance(obj, dict):
             return dict(obj)
         # Namespace or any with __dict__
@@ -122,7 +122,7 @@ def resolve_composite_params(symbol: str, interval: str, defaults: Any) -> Any:
     except Exception:
         base = {}
 
-    result: Dict[str, Any] = dict(base)
+    result: dict[str, Any] = dict(base)
     if "weights" in ov:
         result["weights"] = _merge_weights(base.get("weights"), ov.get("weights"))
     # Copy other scalar overrides

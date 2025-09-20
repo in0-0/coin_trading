@@ -8,13 +8,14 @@ optimize_params.py
 - Outputs results to ./out (best params, nav csv, trades sample)
 """
 
-import os, argparse, json
-from datetime import timedelta
-import pandas as pd
-import numpy as np
+import argparse
+import json
+import os
+
 import matplotlib.pyplot as plt
+import numpy as np
 import optuna
-from tqdm import tqdm
+import pandas as pd
 
 # ---------------- CONFIG ----------------
 SYMBOLS = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT"]

@@ -1,7 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from live_trader import LiveTrader
+
 from binance.exceptions import BinanceAPIException
+from live_trader import LiveTrader
 
 
 class TestLiveTrader(unittest.TestCase):

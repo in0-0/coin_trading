@@ -1,4 +1,4 @@
-from typing import Optional
+
 import pandas as pd
 
 
@@ -8,7 +8,7 @@ class PositionSizer:
         self.max_symbol_weight = max_symbol_weight
         self.min_order_usdt = min_order_usdt
 
-    def compute_spend_amount(self, usdt_balance: float, market_data: pd.DataFrame) -> Optional[float]:
+    def compute_spend_amount(self, usdt_balance: float, market_data: pd.DataFrame) -> float | None:
         if market_data is None or market_data.empty:
             return None
         risk_usdt = usdt_balance * self.risk_per_trade

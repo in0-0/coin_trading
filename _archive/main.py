@@ -1,14 +1,14 @@
-import os
 import datetime
-import time
-from dotenv import load_dotenv
-from binance_data import BinanceData
-from strategy import StrategyFactory
-from backtester import Backtester
-from position_sizer import PositionSizerFactory
-from live_trader import LiveTrader, TradingBot
-from state_manager import StateManager
+import os
+
 import config
+from backtester import Backtester
+from dotenv import load_dotenv
+from live_trader import TradingBot
+from position_sizer import PositionSizerFactory
+from strategy import StrategyFactory
+
+from binance_data import BinanceData
 
 
 def run_all_backtests():

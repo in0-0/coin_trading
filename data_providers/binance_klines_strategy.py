@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any
 
 
 class BinanceKlinesFetchStrategy:
@@ -8,10 +8,10 @@ class BinanceKlinesFetchStrategy:
     at call time. Network errors should be handled by the caller.
     """
 
-    def fetch_initial(self, client: Any, symbol: str, interval: str, start_str: str) -> List[list]:
+    def fetch_initial(self, client: Any, symbol: str, interval: str, start_str: str) -> list[list]:
         return client.get_historical_klines(symbol, interval, start_str)
 
-    def fetch_incremental(self, client: Any, symbol: str, interval: str, start_time_ms: int) -> List[list]:
+    def fetch_incremental(self, client: Any, symbol: str, interval: str, start_time_ms: int) -> list[list]:
         return client.get_klines(symbol=symbol, interval=interval, startTime=start_time_ms)
 
 

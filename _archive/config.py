@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 import os
+
 from binance.client import Client
 from dotenv import load_dotenv
 

@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from models import Position, Signal
 from live_trader_gpt import LiveTrader
+from models import Signal
 
 
 class TestLiveTrader(unittest.TestCase):

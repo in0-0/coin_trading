@@ -1,6 +1,7 @@
-from strategies.base_strategy import Strategy
 from strategies.atr_trailing_stop_strategy import ATRTrailingStopStrategy
+from strategies.base_strategy import Strategy
 from strategies.composite_signal_strategy import CompositeSignalStrategy
+
 
 class StrategyFactory:
     @staticmethod

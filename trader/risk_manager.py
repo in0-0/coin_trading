@@ -4,10 +4,9 @@ Risk management utilities for initial stop-loss and take-profit placement.
 Provides a pure function to compute an initial bracket (SL/TP) based on ATR.
 """
 
-from typing import Tuple
 
 
-def compute_initial_bracket(entry: float, atr: float, side: str, k_sl: float, rr: float) -> Tuple[float, float]:
+def compute_initial_bracket(entry: float, atr: float, side: str, k_sl: float, rr: float) -> tuple[float, float]:
     """Compute initial stop-loss and take-profit prices based on ATR.
 
     Args:

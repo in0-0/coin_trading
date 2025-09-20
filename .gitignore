@@ -109,3 +109,5 @@ dmypy.json
 
 # Backtest logs
 backtest_logs/
+data/
+live_logs/

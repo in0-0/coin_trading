@@ -29,7 +29,7 @@ class TestStateManager(unittest.TestCase):
         self.state_manager.save_positions({"BTCUSDT": pos})
 
         self.assertTrue(os.path.exists(self.test_file))
-        with open(self.test_file, "r") as f:
+        with open(self.test_file) as f:
             raw = json.load(f)
         self.assertIn("BTCUSDT", raw)
         self.assertEqual(raw["BTCUSDT"]["symbol"], "BTCUSDT")

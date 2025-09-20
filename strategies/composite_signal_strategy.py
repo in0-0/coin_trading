@@ -1,10 +1,10 @@
-from typing import Optional
+
 import numpy as np
 import pandas as pd
 import pandas_ta as ta
 
+from models import Position, Signal
 from strategies.base_strategy import Strategy
-from models import Signal, Position
 
 
 class CompositeSignalStrategy(Strategy):
@@ -64,11 +64,11 @@ class CompositeSignalStrategy(Strategy):
         f_bb = np.clip((last.Close - last.bb_mid) / (last.bb_upper - last.bb_mid + eps), -1.0, 1.0)
         f_rsi = np.clip(2.0 * (last.rsi - 50.0) / 50.0, -1.0, 1.0)
         macd_spread = x["macd"] - x["macd_sig"]
-        f_macd = np.tanh(((last.macd - last.macd_sig) / (macd_spread.std(ddof=0) + eps)))
+        f_macd = np.tanh((last.macd - last.macd_sig) / (macd_spread.std(ddof=0) + eps))
         vol_roll = x["Volume"].rolling(getattr(self.cfg, "vol_len", 20))
         f_vol = np.clip(((x["Volume"] - vol_roll.mean()) / (vol_roll.std(ddof=0) + eps)).iloc[-1], -1.0, 1.0)
         obv_ema = x["obv"].ewm(span=getattr(self.cfg, "obv_span", 20), adjust=False).mean()
-        f_obv = np.tanh(((last.obv - obv_ema.iloc[-1]) / (np.std(x["obv"] - obv_ema) + eps)))
+        f_obv = np.tanh((last.obv - obv_ema.iloc[-1]) / (np.std(x["obv"] - obv_ema) + eps))
 
         w = getattr(self.cfg, "weights", None)
         if w is None:
@@ -84,7 +84,7 @@ class CompositeSignalStrategy(Strategy):
         max_score = float(getattr(self.cfg, "max_score", 1.0))
         return float(np.clip(s, -max_score, max_score))
 
-    def get_signal(self, market_data: pd.DataFrame, position: Optional[Position]) -> Signal:
+    def get_signal(self, market_data: pd.DataFrame, position: Position | None) -> Signal:
         s = self.score(market_data)
         buy_th = float(getattr(self.cfg, "buy_threshold", 0.3))
         sell_th = float(getattr(self.cfg, "sell_threshold", -0.3))

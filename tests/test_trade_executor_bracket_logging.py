@@ -1,4 +1,3 @@
-from typing import Dict
 
 import pandas as pd
 
@@ -17,7 +16,7 @@ class DummyStateManager:
     def __init__(self):
         self.saved = False
 
-    def save_positions(self, positions: Dict):
+    def save_positions(self, positions: dict):
         self.saved = True
 
 
@@ -49,7 +48,7 @@ class DummyDataProvider:
 def test_simulated_buy_sets_bracket_and_logs_composite_meta():
     symbol = "BTCUSDT"
     price = 10000.0
-    positions: Dict[str, object] = {}
+    positions: dict[str, object] = {}
 
     executor = TradeExecutor(
         client=DummyClient(),

@@ -1,12 +1,11 @@
 import logging
 import os
-from typing import Optional
 
 import requests
 
 
 class Notifier:
-    def __init__(self, token: Optional[str] = None, chat_id: Optional[str] = None):
+    def __init__(self, token: str | None = None, chat_id: str | None = None):
         self.token = token or os.getenv("TELEGRAM_BOT_TOKEN")
         self.chat_id = chat_id or os.getenv("TELEGRAM_CHAT_ID")
 

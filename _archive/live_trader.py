@@ -1,16 +1,16 @@
 # live_trader.py
-import time
 import datetime
-import numpy as np
-import pandas as pd
-from binance.client import Client
-from binance.exceptions import BinanceAPIException
+import time
 
 import config
-from state_manager import StateManager
-from binance_data import BinanceData
-from strategy import StrategyFactory
+import numpy as np
+from binance.client import Client
+from binance.exceptions import BinanceAPIException
 from position_sizer import PositionSizerFactory
+from strategy import StrategyFactory
+
+from binance_data import BinanceData
+from state_manager import StateManager
 
 
 class LiveTrader:

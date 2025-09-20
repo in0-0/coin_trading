@@ -1,12 +1,13 @@
 import unittest
+
 import pandas as pd
 from strategy import (
-    calculate_rsi,
-    MovingAverageCrossStrategy,
     BuyAndHoldStrategy,
-    VolatilityMomentumStrategy,
     MAReversionStrategy,
+    MovingAverageCrossStrategy,
     StrategyFactory,
+    VolatilityMomentumStrategy,
+    calculate_rsi,
 )
 
 

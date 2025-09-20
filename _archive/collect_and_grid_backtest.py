@@ -11,13 +11,14 @@ Usage:
   - python collect_and_grid_backtest.py
 """
 
-import os, time, math
+import os
+import time
 from datetime import datetime, timedelta
-import pandas as pd
-import numpy as np
-from binance.client import Client
-from tqdm import tqdm
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from binance.client import Client
 from dotenv import load_dotenv
 
 # -------------------- CONFIG --------------------

@@ -1,7 +1,8 @@
 import unittest
-from unittest.mock import patch, MagicMock
-import pandas as pd
 from io import StringIO
+from unittest.mock import MagicMock, patch
+
+import pandas as pd
 
 # Import the main function from your main.py
 from main import main

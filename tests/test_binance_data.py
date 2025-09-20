@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 
-from binance_data import BinanceData, TARGET_COLUMNS
+from binance_data import TARGET_COLUMNS, BinanceData
 
 
 class TestBinanceData(unittest.TestCase):

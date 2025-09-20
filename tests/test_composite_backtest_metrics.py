@@ -1,6 +1,7 @@
-import os
 import json
+import os
 import tempfile
+
 import pandas as pd
 
 from backtests.composite_backtest import run_backtest
@@ -30,7 +31,7 @@ def test_backtest_summary_contains_kelly_inputs_and_metrics_keys():
         base = os.path.join(tmpdir, "bt_metrics")
         path = os.path.join(base, "summary.json")
         assert os.path.exists(path)
-        with open(path, "r") as f:
+        with open(path) as f:
             data = json.load(f)
         # keys expected after implementation
         for key in [

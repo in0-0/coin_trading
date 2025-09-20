@@ -1,5 +1,6 @@
 import os
 import tempfile
+
 import pandas as pd
 
 from backtests.composite_backtest import run_backtest

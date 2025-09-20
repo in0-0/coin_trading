@@ -1,4 +1,5 @@
 import unittest
+
 from position_sizer import AllInSizer, FixedFractionalSizer, PositionSizerFactory
 
 

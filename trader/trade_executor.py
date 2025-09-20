@@ -1,18 +1,20 @@
 import logging
-import time
 import random
-from typing import Dict, Any, Optional, Tuple
+import time
+from typing import Any, Optional
 
 from binance.client import Client
 
 from models import Position
-from .risk_manager import compute_initial_bracket
 from state_manager import StateManager
+
+from .risk_manager import compute_initial_bracket
 from .symbol_rules import (
     get_symbol_filters,
     round_qty_to_step,
     validate_min_notional,
 )
+
 try:
     from .trade_logger import TradeLogger  # optional at runtime
 except Exception:  # pragma: no cover
@@ -52,7 +54,7 @@ class TradeExecutor:
         suffix = f"-{int(time.time()*1000)}-{random.randint(100,999)}"
         return base + suffix
 
-    def _with_retries_and_status_check(self, symbol: str, client_order_id: str, place_fn) -> Optional[Dict[str, Any]]:
+    def _with_retries_and_status_check(self, symbol: str, client_order_id: str, place_fn) -> dict[str, Any] | None:
         retries = max(0, getattr(self, "order_retry", 3))
         delay = 0.5
         for attempt in range(retries + 1):
@@ -75,7 +77,7 @@ class TradeExecutor:
             delay = min(2.0, delay * 1.5)
         return None
 
-    def _compute_fills(self, resp: Dict[str, Any]) -> Tuple[float, float, float, Optional[str]]:
+    def _compute_fills(self, resp: dict[str, Any]) -> tuple[float, float, float, str | None]:
         fills = resp.get("fills") or []
         if not fills:
             # Some endpoints return cummulative fields
@@ -115,7 +117,7 @@ class TradeExecutor:
         except Exception:
             return True
 
-    def _poll_order_until_done(self, symbol: str, initial_resp: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _poll_order_until_done(self, symbol: str, initial_resp: dict[str, Any]) -> dict[str, Any] | None:
         try:
             order_id = initial_resp.get("orderId")
             client_order_id = initial_resp.get("clientOrderId") or initial_resp.get("origClientOrderId")
@@ -149,7 +151,7 @@ class TradeExecutor:
             return 0.0
         return 0.0
 
-    def market_buy(self, symbol: str, usdt_to_spend: float, positions: Dict[str, Position], atr_multiplier: float, timeframe: str, *, k_sl: float = 1.0, rr: float = 1.5, score_meta: Optional[Dict[str, float]] = None) -> None:
+    def market_buy(self, symbol: str, usdt_to_spend: float, positions: dict[str, Position], atr_multiplier: float, timeframe: str, *, k_sl: float = 1.0, rr: float = 1.5, score_meta: dict[str, float] | None = None) -> None:
         try:
             if getattr(self, "kill_switch", False) and getattr(self, "execution_mode", "SIMULATED") == "LIVE":
                 self.notifier.send("⛔ Kill switch active. Skipping LIVE BUY order.")
@@ -163,7 +165,7 @@ class TradeExecutor:
 
                 client_order_id = self._generate_client_order_id("buy", symbol)
 
-                def _place() -> Dict[str, Any]:
+                def _place() -> dict[str, Any]:
                     return self.client.create_order(
                         symbol=symbol,
                         side="BUY",
@@ -286,7 +288,7 @@ class TradeExecutor:
             logging.exception(f"Failed to place BUY order for {symbol}: {exc}")
             self.notifier.send(f"❌ BUY FAILED for {symbol}: {exc}")
 
-    def market_sell(self, symbol: str, positions: Dict[str, Position]) -> None:
+    def market_sell(self, symbol: str, positions: dict[str, Position]) -> None:
         position = positions.get(symbol)
         if not position:
             return
@@ -315,7 +317,7 @@ class TradeExecutor:
 
                 client_order_id = self._generate_client_order_id("sell", symbol)
 
-                def _place() -> Dict[str, Any]:
+                def _place() -> dict[str, Any]:
                     return self.client.create_order(
                         symbol=symbol,
                         side="SELL",

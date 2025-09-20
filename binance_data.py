@@ -1,7 +1,7 @@
-import os
 import logging
+import os
 from datetime import datetime, timedelta
-from typing import Optional, Final, List
+from typing import Final
 
 import pandas as pd
 from binance.client import Client
@@ -11,16 +11,16 @@ from data_providers.base import KlinesFetchStrategy
 from data_providers.binance_klines_strategy import BinanceKlinesFetchStrategy
 
 # 컬럼 이름을 상수로 정의하여 오타 방지 및 가독성 향상
-KLINE_COLUMNS: Final[List[str]] = [
+KLINE_COLUMNS: Final[list[str]] = [
     "Open time", "Open", "High", "Low", "Close", "Volume", "Close time",
     "Quote asset volume", "Number of trades", "Taker buy base asset volume",
     "Taker buy quote asset volume", "Ignore"
 ]
-TARGET_COLUMNS: Final[List[str]] = ["Open time", "Open", "High", "Low", "Close", "Volume"]
-NUMERIC_COLUMNS: Final[List[str]] = ["Open", "High", "Low", "Close", "Volume"]
+TARGET_COLUMNS: Final[list[str]] = ["Open time", "Open", "High", "Low", "Close", "Volume"]
+NUMERIC_COLUMNS: Final[list[str]] = ["Open", "High", "Low", "Close", "Volume"]
 
 class BinanceData:
-    def __init__(self, api_key, secret_key, data_dir="data/", fetch_strategy: Optional[KlinesFetchStrategy] = None):
+    def __init__(self, api_key, secret_key, data_dir="data/", fetch_strategy: KlinesFetchStrategy | None = None):
         """
         Data provider that persists Binance klines to CSV files.
 
@@ -78,7 +78,7 @@ class BinanceData:
         # Return standardized view
         return df_combined.loc[:, TARGET_COLUMNS]
 
-    def _load_existing_data(self, file_path: str) -> Optional[pd.DataFrame]:
+    def _load_existing_data(self, file_path: str) -> pd.DataFrame | None:
         if not os.path.exists(file_path):
             return None
         try:
@@ -100,7 +100,7 @@ class BinanceData:
             logging.warning(f"Existing data not loaded from {file_path}: {e}")
             return None
 
-    def _get_start_timestamp(self, df: Optional[pd.DataFrame]) -> Optional[int]:
+    def _get_start_timestamp(self, df: pd.DataFrame | None) -> int | None:
         if df is None or df.empty:
             return None
         last_open_time = df["Open time"].dropna().iloc[-1]

@@ -1,4 +1,4 @@
-from typing import Protocol, Any, List
+from typing import Any, Protocol
 
 
 class KlinesFetchStrategy(Protocol):
@@ -8,7 +8,7 @@ class KlinesFetchStrategy(Protocol):
     must be a list of rows compatible with `binance_data.KLINE_COLUMNS`.
     """
 
-    def fetch_initial(self, client: Any, symbol: str, interval: str, start_str: str) -> List[list]:
+    def fetch_initial(self, client: Any, symbol: str, interval: str, start_str: str) -> list[list]:
         """Fetch initial historical klines starting from a datetime string.
 
         Parameters
@@ -24,7 +24,7 @@ class KlinesFetchStrategy(Protocol):
         """
         ...
 
-    def fetch_incremental(self, client: Any, symbol: str, interval: str, start_time_ms: int) -> List[list]:
+    def fetch_incremental(self, client: Any, symbol: str, interval: str, start_time_ms: int) -> list[list]:
         """Fetch incremental klines starting from a millisecond timestamp.
 
         Parameters are similar to `fetch_initial`, but use a millisecond timestamp

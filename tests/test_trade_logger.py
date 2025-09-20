@@ -1,11 +1,11 @@
+import json
 import os
 import tempfile
-import json
 from importlib import import_module
 
 
 def _read_lines(path):
-    with open(path, "r") as f:
+    with open(path) as f:
         return [line.strip() for line in f.readlines()]
 
 
@@ -13,7 +13,7 @@ def test_tradelogger_writes_headers_and_appends_rows():
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             mod = import_module("trader.trade_logger")
-            TradeLogger = getattr(mod, "TradeLogger")
+            TradeLogger = mod.TradeLogger
         except Exception:
             assert False, "TradeLogger not implemented yet"
 
@@ -38,6 +38,6 @@ def test_tradelogger_writes_headers_and_appends_rows():
         logger.save_summary({"total_return": 0.02})
         summary_json = os.path.join(tmpdir, "test_run", "summary.json")
         assert os.path.exists(summary_json)
-        with open(summary_json, "r") as f:
+        with open(summary_json) as f:
             data = json.load(f)
         assert "total_return" in data

@@ -1,6 +1,7 @@
-import pandas as pd
-import numpy as np
 from types import SimpleNamespace
+
+import numpy as np
+import pandas as pd
 
 
 def make_df(n=120, start=100.0, drift=0.2, vol=1.0):
@@ -21,8 +22,8 @@ def make_df(n=120, start=100.0, drift=0.2, vol=1.0):
 
 
 def test_composite_strategy_score_and_signal_interfaces():
-    from strategies.composite_signal_strategy import CompositeSignalStrategy
     from models import Signal
+    from strategies.composite_signal_strategy import CompositeSignalStrategy
 
     cfg = SimpleNamespace(
         ema_fast=12,

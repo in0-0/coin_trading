@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Optional
 
-import os
-import json
 import pandas as pd
 
 try:
@@ -20,7 +17,7 @@ class BacktestSummary:
     pnl: float
 
 
-def run_backtest(*, df: pd.DataFrame, strategy, warmup: int = 50, fee_bps: float = 10.0, slippage_bps: float = 5.0, write_logs: bool = False, log_dir: Optional[str] = None, run_id: Optional[str] = None) -> Dict[str, float]:
+def run_backtest(*, df: pd.DataFrame, strategy, warmup: int = 50, fee_bps: float = 10.0, slippage_bps: float = 5.0, write_logs: bool = False, log_dir: str | None = None, run_id: str | None = None) -> dict[str, float]:
     """Minimal backtest loop that iterates on closed candles with no lookahead.
 
     Returns a dict summary for tests.
