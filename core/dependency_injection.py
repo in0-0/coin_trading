@@ -201,13 +201,14 @@ class TradingConfig:
             max_score=1.0,
             buy_threshold=0.3,
             sell_threshold=-0.3,
-            weights=type('Weights', (), {
+            weights={
                 'ma': 0.25, 'bb': 0.15, 'rsi': 0.15, 'macd': 0.25, 'vol': 0.1, 'obv': 0.1
-            })(),
+            },
             # RSI와 BB의 매개변수명도 추가
             rsi_length=14,
             bb_length=20
         )
+
         return enhanced_config
 
 

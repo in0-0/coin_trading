@@ -182,9 +182,15 @@ class StrategyFactory:
             if getattr(config, param, None) is None:
                 errors.append(f"Missing required parameter: {param}")
 
-        # 가중치 합계 검증
-        if hasattr(config, 'weights') and config.weights:
-            total_weight = sum(config.weights.__dict__.values())
+        # 가중치 합계 검증 (안전한 방식)
+        weights = getattr(config, 'weights', None)
+        if weights:
+            if isinstance(weights, dict):
+                total_weight = sum(weights.values())
+            else:
+                # 동적 객체의 경우
+                total_weight = sum(getattr(weights, attr, 0) for attr in ['ma', 'bb', 'rsi', 'macd', 'vol', 'obv'])
+
             if abs(total_weight - 1.0) > 0.01:  # 1% 오차 허용
                 errors.append(f"Strategy weights must sum to 1.0, got {total_weight}")
 

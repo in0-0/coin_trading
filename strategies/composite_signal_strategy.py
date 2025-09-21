@@ -8,7 +8,7 @@ from strategies.base_strategy import Strategy
 
 
 class CompositeSignalStrategy(Strategy):
-    def __init__(self, config):
+    def __init__(self, config=None, **kwargs):
         self.cfg = config
 
     def _features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -73,13 +73,32 @@ class CompositeSignalStrategy(Strategy):
         w = getattr(self.cfg, "weights", None)
         if w is None:
             w = type("W", (), {"ma": 0.3, "bb": 0.15, "rsi": 0.15, "macd": 0.25, "vol": 0.1, "obv": 0.05})()
+
+        # weights가 딕셔너리인지 객체인지 확인
+        if isinstance(w, dict):
+            # 딕셔너리인 경우
+            w_ma = w.get("ma", 0.3)
+            w_bb = w.get("bb", 0.15)
+            w_rsi = w.get("rsi", 0.15)
+            w_macd = w.get("macd", 0.25)
+            w_vol = w.get("vol", 0.1)
+            w_obv = w.get("obv", 0.05)
+        else:
+            # 객체인 경우
+            w_ma = getattr(w, "ma", 0.3)
+            w_bb = getattr(w, "bb", 0.15)
+            w_rsi = getattr(w, "rsi", 0.15)
+            w_macd = getattr(w, "macd", 0.25)
+            w_vol = getattr(w, "vol", 0.1)
+            w_obv = getattr(w, "obv", 0.05)
+
         s = (
-            w.ma * f_ma
-            + w.bb * f_bb
-            + w.rsi * f_rsi
-            + w.macd * f_macd
-            + w.vol * f_vol
-            + w.obv * f_obv
+            w_ma * f_ma
+            + w_bb * f_bb
+            + w_rsi * f_rsi
+            + w_macd * f_macd
+            + w_vol * f_vol
+            + w_obv * f_obv
         )
         max_score = float(getattr(self.cfg, "max_score", 1.0))
         return float(np.clip(s, -max_score, max_score))

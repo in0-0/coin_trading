@@ -200,6 +200,9 @@ class StrategyConfig(BaseModel):
     risk_per_trade: Optional[float] = Field(0.005, gt=0, le=0.1)
     max_position_size: Optional[float] = Field(0.2, gt=0, le=1.0)
 
+    # Composite Strategy weights
+    weights: Optional[Dict[str, float]] = None
+
     model_config = ConfigDict(
         extra="allow"  # 알 수 없는 필드도 허용
     )
