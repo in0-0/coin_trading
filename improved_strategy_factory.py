@@ -75,10 +75,12 @@ class StrategyFactory:
                 # config가 kwargs에 있으면 제거하고 개별 매개변수로 처리
                 config_obj = kwargs.pop('config')
                 strategy_kwargs = self._extract_strategy_kwargs(strategy_name, config_obj)
-                return strategy_class(**strategy_kwargs, **kwargs)
+                # 생성자에 검증된 필드만 전달하여 예기치 않은 인자를 차단
+                return strategy_class(**strategy_kwargs)
             else:
-                # config가 kwargs에 없으면 기존 방식으로 처리
-                return strategy_class(config=config, **kwargs)
+                # config가 kwargs에 없으면 config로부터 생성자 인자를 추출해 전달
+                strategy_kwargs = self._extract_strategy_kwargs(strategy_name, config)
+                return strategy_class(**strategy_kwargs)
         except Exception as e:
             raise ConfigurationError(
                 f"Failed to create strategy {strategy_name}: {e}",

@@ -5,6 +5,7 @@ Pydantic 모델을 활용한 강력한 데이터 검증과 타입 안정성을 �
 """
 
 import logging
+import time
 import os
 from datetime import datetime, timedelta
 from typing import Final, List, Optional, Dict, Any, cast
@@ -119,8 +120,14 @@ class ImprovedBinanceData:
             # 데이터 검증 및 변환
             validated_klines = self._validate_and_normalize_klines(raw_klines, symbol)
 
-            # DataFrame 생성 및 병합
+            # DataFrame 생성 및 병합 (UTC-naive로 표준화)
             df_new = pd.DataFrame(validated_klines)
+            if "Open time" in df_new.columns:
+                try:
+                    df_new["Open time"] = pd.to_datetime(df_new["Open time"], utc=True).dt.tz_localize(None)
+                except Exception:
+                    # 실패 시 기본 변환 시도
+                    df_new["Open time"] = pd.to_datetime(df_new["Open time"], errors="coerce")
             df_combined = self._combine_dataframes(df_existing, df_new)
 
             # 파일 저장
@@ -155,6 +162,14 @@ class ImprovedBinanceData:
     def _validate_and_normalize_klines(self, raw_klines: List[List], symbol: str) -> List[Dict[str, Any]]:
         """Kline 데이터 검증 및 정규화"""
         try:
+            # 열린 캔들 제거: close time(ms)가 현재 시각보다 미래인 행 제외
+            try:
+                now_ms = int(time.time() * 1000)
+                raw_klines = [row for row in raw_klines if len(row) > 6 and int(row[6]) <= now_ms]
+            except Exception:
+                # 필터링 실패 시 원본 그대로 진행 (검증에서 걸러짐)
+                pass
+
             # Pydantic 모델을 사용한 검증
             validated_data = validate_kline_data(raw_klines)
 
@@ -237,6 +252,12 @@ class ImprovedBinanceData:
         else:
             df_combined = df_new
 
+        # 정렬 전에 타임존 표준화 (모두 naive)
+        try:
+            if "Open time" in df_combined.columns:
+                df_combined["Open time"] = pd.to_datetime(df_combined["Open time"], utc=True).dt.tz_localize(None)
+        except Exception:
+            pass
         df_combined.sort_values(by="Open time", inplace=True)
         return df_combined
 

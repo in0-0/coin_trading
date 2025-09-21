@@ -43,7 +43,7 @@ configure_dependencies(config)
 error_handler = get_global_error_handler()
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO,
+logging.basicConfig(level=logging.DEBUG,
                     format="%(asctime)s [%(levelname)s] %(message)s",
                     handlers=[logging.FileHandler(config.log_file), logging.StreamHandler()])
 
@@ -223,7 +223,7 @@ class ImprovedLiveTrader:
                 )
 
     def _find_and_execute_entries(self):
-        """진입 신호 탐색 및 실행"""
+        """진입 신호 탐색 및 실행 (Phase 2,3,4 지원)"""
         usdt_balance = self.executor.get_usdt_balance()
 
         if usdt_balance <= self.config.min_order_usdt:
@@ -243,6 +243,25 @@ class ImprovedLiveTrader:
 
                 signal = strategy.get_signal(market_data, current_position)
 
+                # Phase 1: 포지션 액션 처리 (향후 Phase 2, 3, 4에서 확장)
+                position_actions = []
+                if current_position and hasattr(strategy, 'get_position_action'):
+                    try:
+                        action = strategy.get_position_action(market_data, current_position)
+                        if action:
+                            position_actions.append(action)
+                    except Exception as e:
+                        self.logger.warning(f"Error getting position action for {symbol}: {e}")
+
+                # Phase 2, 3 & 4: 포지션 액션 처리
+                for action in position_actions:
+                    if action.action_type == "BUY_ADD":
+                        self._handle_position_addition(symbol, action, current_position, market_data)
+                    elif action.action_type == "UPDATE_TRAIL":
+                        self._handle_trailing_stop_update(symbol, action, current_position)
+                    elif action.action_type == "SELL_PARTIAL":
+                        self._handle_partial_exit(symbol, action, current_position)
+
                 if signal == Signal.BUY:
                     self._execute_buy_order(symbol, usdt_balance, market_data)
                     concurrent_positions += 1
@@ -257,18 +276,151 @@ class ImprovedLiveTrader:
                     notify=False
                 )
 
+    def _handle_position_addition(self, symbol: str, action: dict, position: Position, market_data: pd.DataFrame):
+        """Phase 2: 불타기/물타기 포지션 추가 처리"""
+        try:
+            current_price = self.data_provider.get_current_price(symbol)
+            if current_price <= 0:
+                self.logger.warning(f"Cannot add position for {symbol}: invalid current price")
+                return
+
+            # 액션에서 사이즈 정보 추출
+            spend_amount = action.metadata.get("pyramid_size") or action.metadata.get("averaging_size", 0)
+            if not spend_amount:
+                # 기본 계산 (현재 포지션의 50%)
+                spend_amount = position.qty * position.entry_price * 0.5
+
+            if spend_amount < self.config.min_order_usdt:
+                self.logger.info(f"Skipping position addition for {symbol}: amount too small ({spend_amount})")
+                return
+
+            # 새로운 PositionLeg 생성
+            from models import PositionLeg
+            new_leg = PositionLeg(
+                timestamp=datetime.now(timezone.utc),
+                side="BUY",
+                qty=spend_amount / current_price,
+                price=current_price,
+                reason=action.reason
+            )
+
+            # 포지션에 레그 추가
+            position.add_leg(new_leg)
+
+            # 실제 매수 주문 실행
+            self.logger.info(f"Phase 2: Adding position for {symbol}, amount={spend_amount}, reason={action.reason}")
+            self._execute_buy_order(symbol, spend_amount)
+
+            # 포지션 저장
+            self.state_manager.upsert_position(symbol, position)
+
+            # 알림
+            self.notifier.send(f"📈 {action.reason.upper()} {symbol}\n"
+                              f"Added: {new_leg.qty:.6f} @ ${current_price:.4f}\n"
+                              f"New avg: ${position.entry_price:.4f}")
+
+        except Exception as e:
+            self.error_handler.handle_error(
+                e,
+                context={"symbol": symbol, "operation": "handle_position_addition"},
+                notify=True
+            )
+
+    def _handle_trailing_stop_update(self, symbol: str, action: dict, position: Position):
+        """Phase 3: 트레일링 스탑 업데이트 처리"""
+        try:
+            new_trail_price = action.price
+            if new_trail_price is None:
+                self.logger.warning(f"Cannot update trailing stop for {symbol}: no price provided")
+                return
+
+            # 기존 트레일링 스탑과 비교
+            old_trail = position.trailing_stop_price
+
+            # 트레일링 스탑 업데이트
+            position.update_trailing_stop(new_trail_price)
+
+            # 포지션 저장
+            self.state_manager.upsert_position(symbol, position)
+
+            # 알림
+            self.notifier.send(f"🔄 TRAILING STOP UPDATED {symbol}\n"
+                              f"Old: ${old_trail:.4f} → New: ${new_trail_price:.4f}\n"
+                              f"Highest: ${action.metadata.get('highest_price', 0):.4f}")
+
+            self.logger.info(f"Phase 3: Trailing stop updated for {symbol}: {old_trail} -> {new_trail_price}")
+
+        except Exception as e:
+            self.error_handler.handle_error(
+                e,
+                context={"symbol": symbol, "operation": "handle_trailing_stop_update"},
+                notify=True
+            )
+
+    def _handle_partial_exit(self, symbol: str, action: dict, position: Position):
+        """Phase 4: 부분 청산 처리"""
+        try:
+            current_price = self.data_provider.get_current_price(symbol)
+            if current_price <= 0:
+                self.logger.warning(f"Cannot partial exit for {symbol}: invalid current price")
+                return
+
+            # 부분 청산 수량 계산
+            exit_qty = action.metadata.get("exit_qty", 0)
+            if exit_qty <= 0:
+                exit_qty = position.qty * action.qty_ratio
+
+            # 최소 주문 수량 확인
+            if exit_qty < self.config.min_order_usdt / current_price:
+                self.logger.info(f"Skipping partial exit for {symbol}: qty too small ({exit_qty})")
+                return
+
+            # 새로운 PositionLeg 생성 (청산)
+            from models import PositionLeg
+            exit_leg = PositionLeg(
+                timestamp=datetime.now(timezone.utc),
+                side="SELL",
+                qty=exit_qty,
+                price=current_price,
+                reason=action.reason
+            )
+
+            # 부분 청산 이력 추가
+            position.partial_exits.append(exit_leg)
+
+            # 실제 매도 주문 실행
+            self.logger.info(f"Phase 4: Partial exit for {symbol}, qty={exit_qty}, reason={action.reason}")
+            self.executor.market_sell_partial(symbol, position, exit_qty, {"partial_exit": True, "reason": action.reason})
+
+            # 포지션 저장
+            self.state_manager.upsert_position(symbol, position)
+
+            # 알림
+            profit_pct = action.metadata.get("profit_pct", 0)
+            unrealized_pct = action.metadata.get("unrealized_pct", 0)
+            self.notifier.send(f"🟡 PARTIAL EXIT {symbol}\n"
+                              f"Exited: {exit_leg.qty:.6f} @ ${current_price:.4f}\n"
+                              f"Profit: {profit_pct:.1%} (Total: {unrealized_pct:.1%})")
+
+        except Exception as e:
+            self.error_handler.handle_error(
+                e,
+                context={"symbol": symbol, "operation": "handle_partial_exit"},
+                notify=True
+            )
+
     def _execute_buy_order(self, symbol: str, usdt_balance: float, market_data: pd.DataFrame):
-        """매수 주문 실행"""
+        """매수 주문 실행 (메타데이터 수집 강화)"""
         try:
             spend_amount = self._calculate_position_size(symbol, usdt_balance, market_data)
 
             if not spend_amount or spend_amount < self.config.min_order_usdt:
                 return
 
-            # 스코어 메타 정보 수집
-            score_meta = self._get_score_metadata(symbol, market_data)
+            # 스코어 메타 정보 수집 (개선된 버전)
+            score_meta = self._get_enhanced_score_metadata(symbol, market_data, usdt_balance, spend_amount)
 
-            self.logger.info(f"Executing BUY for {symbol}: {spend_amount}")
+            self.logger.info(f"Executing BUY for {symbol}: {spend_amount}, meta: {score_meta}")
 
             # 주문 실행 (실제 주문 로직은 executor에 위임)
             self.executor.market_buy(
@@ -288,6 +440,38 @@ class ImprovedLiveTrader:
                 context={"symbol": symbol, "operation": "execute_buy"},
                 notify=True
             )
+
+    def _get_enhanced_score_metadata(self, symbol: str, market_data: pd.DataFrame, usdt_balance: float, spend_amount: float) -> Optional[Dict]:
+        """강화된 스코어 메타 정보 수집 (live_trader_gpt.py와 동일)"""
+        try:
+            strategy = self.strategies.get(symbol)
+            if not strategy:
+                return None
+
+            score_fn_obj = getattr(strategy, 'score', None) if strategy else None
+            if not callable(score_fn_obj):
+                return None
+
+            score_fn = cast(Callable[[pd.DataFrame], float], score_fn_obj)
+            score = float(score_fn(market_data))
+            max_score = float(getattr(getattr(strategy, "cfg", None), "max_score", 1.0))
+            confidence = max(0.0, min(1.0, abs(score) / max(1e-9, max_score)))
+
+            # 켈리 비율 계산 (live_trader_gpt.py와 동일)
+            kelly_fraction = min(self.config.max_symbol_weight, max(0.0, spend_amount / max(1e-9, usdt_balance)))
+
+            return {
+                "score": score,
+                "max_score": max_score,
+                "confidence": confidence,
+                "kelly_f": kelly_fraction,
+                "position_size": spend_amount,
+                "available_balance": usdt_balance
+            }
+
+        except Exception as e:
+            self.logger.warning(f"Failed to collect enhanced score metadata for {symbol}: {e}")
+            return None
 
     def _calculate_position_size(self, symbol: str, usdt_balance: float, market_data: pd.DataFrame) -> Optional[float]:
         """포지션 크기 계산"""

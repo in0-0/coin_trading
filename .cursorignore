@@ -6,3 +6,6 @@ live_trader.log
 # Lock failing tests during TDD until fixed
 # !/tests/
 # /tests/**
+# Lock failing tests during TDD until fixed
+# !/tests/
+# /tests/**

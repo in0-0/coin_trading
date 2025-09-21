@@ -219,3 +219,102 @@ backtests/
 - 리팩토링 단계에서 코드 구조 개선
 - 기존 기능의 호환성 지속 보장
 - .cursorignore에 테스트 잠금 규칙 적용
+
+## 13) `improved_live_trader.py` → 정상 동작 리팩토링
+
+### 현재 상황 분석
+- `improved_live_trader.py`: 아키텍처 개선(의존성 주입, 에러 핸들링)에 초점
+- `live_trader_gpt.py`: Phase 2,3,4 로직, Composite 전략 상세 지원 등 완전한 기능
+- **문제**: `improved_live_trader.py`에는 핵심 트레이딩 기능(Phase 로직, 메타데이터 수집)이 누락
+
+### 목표
+`improved_live_trader.py`의 아키텍처 장점 유지하면서 `live_trader_gpt.py`의 모든 핵심 기능을 통합하여 정상 동작하도록 개선
+
+### 13.1) Phase 1: 핵심 기능 통합 (1-2일)
+**목표**: 현재 구조 유지하면서 `live_trader_gpt.py`의 핵심 기능을 통합
+
+**구현할 기능들**:
+- [ ] Composite 전략 설정 개선 (`live_trader_gpt.py`의 상세 설정 로직 통합)
+- [ ] 포지션 액션 처리 프레임워크 추가 (Phase 2,3,4 확장 준비)
+- [ ] 메타데이터 수집 개선 (켈리 비율, 신뢰도, 스코어 정보)
+
+**TDD 계획**:
+- [ ] 실패 테스트 작성: Composite 설정, 포지션 액션 처리, 메타데이터 수집
+- [ ] 최소 구현: 기본 기능 통합
+- [ ] 리팩토링: 에러 처리 및 타입 안정성
+
+### 13.2) Phase 2: Phase 2,3,4 로직 구현 (2-3일)
+**목표**: `live_trader_gpt.py`의 고급 포지션 관리 로직 완전 구현
+
+**구현할 기능들**:
+- [ ] `_handle_position_addition`: 불타기/물타기 포지션 추가 처리
+- [ ] `_handle_trailing_stop_update`: 동적 트레일링 스탑 조정
+- [ ] `_handle_partial_exit`: 부분 청산 처리 및 이력 관리
+
+**TDD 계획**:
+- [ ] 실패 테스트 작성: 각 Phase 로직별 시나리오
+- [ ] 최소 구현: 기본 Phase 로직 구현
+- [ ] 리팩토링: `PositionLeg` 관리 및 상태 동기화
+
+### 13.3) Phase 3: Composite 전략 지원 강화 (1-2일)
+**목표**: `live_trader_gpt.py` 수준의 Composite 전략 처리
+
+**구현할 기능들**:
+- [ ] 설정 시스템 개선 (심볼별, 시간대별 설정 오버라이드)
+- [ ] 켈리 포지션 사이징 개선 (Composite 전략 전용 로직)
+- [ ] 전략별 메타데이터 처리 (score() 메서드 결과 처리)
+
+**TDD 계획**:
+- [ ] 실패 테스트 작성: Composite 전략 설정, 켈리 사이징
+- [ ] 최소 구현: 기본 Composite 지원
+- [ ] 리팩토링: 설정 파일 통합 및 검증
+
+### 13.4) Phase 4: 데이터 저장 및 로깅 개선 (1-2일)
+**목표**: `live_trader_gpt.py` 수준의 상세한 로깅과 데이터 저장
+
+**구현할 기능들**:
+- [ ] 트레이드 로거 개선 (상세한 트레이드 정보 저장)
+- [ ] 성과 계산 및 저장 (`_calculate_and_save_final_performance` 구현)
+- [ ] 이벤트 로깅 강화 (모든 주요 이벤트의 상세 로깅)
+
+**TDD 계획**:
+- [ ] 실패 테스트 작성: 로그 저장, 성과 계산
+- [ ] 최소 구현: 기본 로깅 시스템
+- [ ] 리팩토링: TradeLogger 통합 및 성능 최적화
+
+### 13.5) Phase 5: 테스트 및 통합 (1-2일)
+**목표**: 리팩토링된 코드의 안정성 보장
+
+**구현할 기능들**:
+- [ ] 통합 테스트 작성 (`live_trader_gpt.py`와 동일 시나리오)
+- [ ] 성능 검증 (기존 코드와 비교)
+- [ ] 문서화 (변경사항 및 사용법)
+
+**TDD 계획**:
+- [ ] 실패 테스트 작성: 전체 시스템 통합
+- [ ] 최소 구현: 기본 테스트 스크립트
+- [ ] 리팩토링: CI/CD 파이프라인 연동
+
+### 예상 파일 구조
+```
+core/
+├── position_management.py           # Phase 2,3,4 로직 (신규)
+├── metadata_collector.py            # 메타데이터 수집 (신규)
+└── dependency_injection.py          # Composite 설정 강화
+
+improved_live_trader.py              # 주요 리팩토링 대상
+├── Phase 2,3,4 메서드 추가
+├── Composite 전략 처리 개선
+└── 메타데이터 수집 강화
+
+tests/
+├── test_improved_live_trader.py    # 통합 테스트 (신규/개선)
+└── test_position_management.py     # Phase 로직 테스트 (신규)
+```
+
+### 완료 조건
+- [ ] Phase 1-5: 모든 기능 구현 완료
+- [ ] `live_trader_gpt.py`와 동일한 기능 제공
+- [ ] 모든 테스트 통과
+- [ ] 성능 저하 없음
+- [ ] 아키텍처 개선사항 유지 (의존성 주입, 에러 핸들링)

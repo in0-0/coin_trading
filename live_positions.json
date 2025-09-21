@@ -1,1 +1,20 @@
-{}
+{
+    "BNBUSDT": {
+        "symbol": "BNBUSDT",
+        "qty": 0.009592234127250578,
+        "entry_price": 1042.51,
+        "stop_price": 1011.2347,
+        "open_time": "2025-09-21T00:09:09.029307+00:00",
+        "legs": [
+            {
+                "timestamp": "2025-09-21T00:09:09.029307+00:00",
+                "side": "BUY",
+                "qty": 0.009592234127250578,
+                "price": 1042.51,
+                "reason": "entry"
+            }
+        ],
+        "trailing_stop_price": 1011.2347,
+        "highest_price": 1042.51
+    }
+}
