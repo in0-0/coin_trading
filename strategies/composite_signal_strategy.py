@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pandas_ta as ta
 
-from models import Position, Signal
+from models import Position, Signal, PositionAction
 from strategies.base_strategy import Strategy
 
 
@@ -93,5 +93,101 @@ class CompositeSignalStrategy(Strategy):
         if s <= sell_th:
             return Signal.SELL
         return Signal.HOLD
+
+    def get_position_action(self, market_data: pd.DataFrame, position: Position) -> PositionAction | None:
+        """
+        Phase 2, 3 & 4: Composite 전략의 포지션 액션 처리
+        Composite 스코어 기반으로 불타기, 트레일링 스탑, 부분 청산 결정
+        """
+        if position is None or not position.legs:
+            return None
+
+        # 현재가 추출
+        if market_data is None or market_data.empty:
+            return None
+
+        current_price = float(market_data["Close"].iloc[-1])
+
+        # ATR 추출 (트레일링 스탑 계산용)
+        if "atr" not in market_data.columns:
+            # ATR 계산
+            market_data = market_data.copy()
+            atr_len = min(int(getattr(self.cfg, "atr_len", 14)), max(2, len(market_data)))
+            market_data['atr'] = ta.atr(market_data['High'], market_data['Low'], market_data['Close'], length=atr_len)
+            # ATR 계산 후 NaN 제거
+            market_data = market_data.dropna()
+
+        if market_data.empty or "atr" not in market_data.columns:
+            return None
+
+        atr = float(market_data["atr"].iloc[-1])
+        if atr <= 0 or pd.isna(atr):
+            return None
+
+        # Composite 스코어 계산
+        score = self.score(market_data)
+
+        # 기본 지출액 계산
+        base_spend = position.qty * position.entry_price * 0.5
+
+        # Phase 2: 불타기 (스코어가 매우 높을 때)
+        if score > 0.7:  # 강한 상승 신호
+            return PositionAction(
+                action_type="BUY_ADD",
+                price=None,
+                metadata={
+                    "pyramid_size": base_spend,
+                    "reason": "composite_pyramid",
+                    "score": score
+                }
+            )
+
+        # Phase 2: 물타기 (스코어가 매우 낮지만 하락폭이 제한적일 때)
+        if score < -0.5 and (position.entry_price - current_price) / position.entry_price < 0.1:
+            return PositionAction(
+                action_type="BUY_ADD",
+                price=None,
+                metadata={
+                    "averaging_size": base_spend,
+                    "reason": "composite_averaging",
+                    "score": score
+                }
+            )
+
+        # Phase 3: 트레일링 스탑 업데이트
+        # 현재 최고가 대비 ATR 기반 트레일링 스탑
+        highest_price = max(leg.price for leg in position.legs)
+        trailing_distance = atr * 1.5  # ATR의 1.5배
+        new_trail_price = highest_price - trailing_distance
+
+        # 현재 트레일링 스탑보다 높으면 업데이트
+        if new_trail_price > position.trailing_stop_price:
+            return PositionAction(
+                action_type="UPDATE_TRAIL",
+                price=new_trail_price,
+                metadata={
+                    "highest_price": highest_price,
+                    "trailing_distance": trailing_distance,
+                    "reason": "composite_trailing_update"
+                }
+            )
+
+        # Phase 4: 부분 청산 (스코어가 약해질 때)
+        if score < 0.2 and score > -0.2:  # 중립 영역
+            profit_pct = (current_price - position.entry_price) / position.entry_price
+            if profit_pct > 0.05:  # 5% 이상 수익 시
+                return PositionAction(
+                    action_type="SELL_PARTIAL",
+                    price=None,
+                    metadata={
+                        "exit_qty": position.qty * 0.3,  # 30% 청산
+                        "qty_ratio": 0.3,
+                        "reason": "composite_partial_exit",
+                        "profit_pct": profit_pct,
+                        "score": score
+                    }
+                )
+
+        return None
 
 

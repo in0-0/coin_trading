@@ -37,7 +37,10 @@ class ATRTrailingStopStrategy(Strategy):
 
         # ATR 추출 (트레일링 스탑 계산용)
         if "atr" not in market_data.columns:
-            return None
+            # ATR 계산
+            self._calculate_indicators(market_data)
+            if "atr" not in market_data.columns:
+                return None
 
         atr = float(market_data["atr"].iloc[-1])
         if atr <= 0:
@@ -46,25 +49,58 @@ class ATRTrailingStopStrategy(Strategy):
         # 기본 지출액 계산 (단순 버전)
         base_spend = position.qty * position.entry_price * 0.5  # 현재 포지션의 50%
 
-        # Phase 2: 불타기 우선 체크
-        pyramid_action = self.position_manager.get_pyramid_action(position, current_price, base_spend)
-        if pyramid_action:
-            return pyramid_action
+        # Phase 2: 불타기 우선 체크 (간단한 버전)
+        unrealized_pct = (current_price - position.entry_price) / position.entry_price
+        if unrealized_pct >= 0.03:  # 3% 수익 시 불타기
+            return PositionAction(
+                action_type="BUY_ADD",
+                price=None,
+                metadata={
+                    "pyramid_size": base_spend,
+                    "reason": "atr_pyramid",
+                    "profit_pct": unrealized_pct
+                }
+            )
 
-        # Phase 2: 물타기 체크
-        averaging_action = self.position_manager.get_averaging_action(position, current_price, base_spend)
-        if averaging_action:
-            return averaging_action
+        # Phase 2: 물타기 체크 (간단한 버전)
+        if unrealized_pct <= -0.05:  # -5% 손실 시 물타기
+            return PositionAction(
+                action_type="BUY_ADD",
+                price=None,
+                metadata={
+                    "averaging_size": base_spend,
+                    "reason": "atr_averaging",
+                    "loss_pct": unrealized_pct
+                }
+            )
 
-        # Phase 3: 트레일링 스탑 업데이트 체크
-        trailing_action = self.trailing_manager.get_trailing_update_action(position, current_price, atr)
-        if trailing_action:
-            return trailing_action
+        # Phase 3: 트레일링 스탑 업데이트 체크 (간단한 버전)
+        highest_price = max(leg.price for leg in position.legs)
+        if current_price > highest_price:
+            new_trail_price = current_price - (atr * self.atr_multiplier)
+            if new_trail_price > position.trailing_stop_price:
+                return PositionAction(
+                    action_type="UPDATE_TRAIL",
+                    price=new_trail_price,
+                    metadata={
+                        "highest_price": highest_price,
+                        "trailing_distance": atr * self.atr_multiplier,
+                        "reason": "atr_trailing_update"
+                    }
+                )
 
-        # Phase 4: 부분 청산 체크
-        partial_exit_action = self.partial_exit_manager.get_partial_exit_action(position, current_price)
-        if partial_exit_action:
-            return partial_exit_action
+        # Phase 4: 부분 청산 체크 (간단한 버전)
+        if unrealized_pct >= 0.05:  # 5% 수익 시 부분 청산
+            return PositionAction(
+                action_type="SELL_PARTIAL",
+                price=None,
+                metadata={
+                    "exit_qty": position.qty * 0.3,  # 30% 청산
+                    "qty_ratio": 0.3,
+                    "reason": "atr_partial_exit",
+                    "profit_pct": unrealized_pct
+                }
+            )
 
         return None
 
