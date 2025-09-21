@@ -13,6 +13,7 @@
 - [x] [improved_live_trader.py](mdc:improved_live_trader.py): 포지션 로딩/타입을 `Position`으로 일관화, 임시 `PositionStateManager` 제거
 - [x] [improved_live_trader.py](mdc:improved_live_trader.py): Composite Kelly 사이징에서 안전한 `score` 호출/캐스팅 적용
 - [x] [improved_live_trader.py](mdc:improved_live_trader.py): 테스트넷 API 키 디버그 출력 제거
+- [x] Composite strategy weights validation bug fix: Pydantic 모델과 동적 객체 처리 문제 해결
 
 ## 4) 실거래 주문 실행 (Enable Live Orders)
 
