@@ -153,7 +153,7 @@ class TradingConfig:
         return errors
 
     def get_strategy_config(self, symbol: str) -> StrategyConfig:
-        """심볼별 전략 설정 반환"""
+        """심볼별 전략 설정 반환 (Composite 전략 상세 설정 지원)"""
         if symbol in self.strategy_configs:
             return self.strategy_configs[symbol]
 
@@ -168,8 +168,47 @@ class TradingConfig:
             max_position_size=self.max_symbol_weight
         )
 
+        # Composite 전략의 경우 상세 설정 추가
+        if self.strategy_name == "composite_signal":
+            config = self._enhance_composite_config(config)
+
         self.strategy_configs[symbol] = config
         return config
+
+    def _enhance_composite_config(self, base_config: StrategyConfig) -> StrategyConfig:
+        """Composite 전략 설정 강화"""
+        # Composite 전략의 기본 설정값들을 추가
+        enhanced_config = StrategyConfig(
+            strategy_name=base_config.strategy_name,
+            symbol=base_config.symbol,
+            timeframe=base_config.timeframe,
+            atr_period=base_config.atr_period,
+            atr_multiplier=base_config.atr_multiplier,
+            risk_per_trade=base_config.risk_per_trade,
+            max_position_size=base_config.max_position_size,
+            # Composite 전략 특화 설정
+            ema_fast=12,
+            ema_slow=26,
+            bb_len=20,
+            rsi_len=14,
+            macd_fast=12,
+            macd_slow=26,
+            macd_signal=9,
+            atr_len=14,
+            k_atr_norm=1.0,
+            vol_len=20,
+            obv_span=20,
+            max_score=1.0,
+            buy_threshold=0.3,
+            sell_threshold=-0.3,
+            weights=type('Weights', (), {
+                'ma': 0.25, 'bb': 0.15, 'rsi': 0.15, 'macd': 0.25, 'vol': 0.1, 'obv': 0.1
+            })(),
+            # RSI와 BB의 매개변수명도 추가
+            rsi_length=14,
+            bb_length=20
+        )
+        return enhanced_config
 
 
 class DependencyContainer:

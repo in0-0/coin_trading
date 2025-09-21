@@ -474,40 +474,46 @@ class ImprovedLiveTrader:
             return None
 
     def _calculate_position_size(self, symbol: str, usdt_balance: float, market_data: pd.DataFrame) -> Optional[float]:
-        """포지션 크기 계산"""
+        """포지션 크기 계산 (live_trader_gpt.py와 동일한 로직)"""
         try:
             strategy = self.strategies.get(symbol)
             if not strategy:
                 return None
 
-            if self.config.strategy_name == "composite_signal":
-                # Kelly 기반 포지션 사이징 (Composite 전략에 한함)
-                score_fn_obj = getattr(strategy, "score", None)
-                if callable(score_fn_obj):
-                    score_fn = cast(Callable[[pd.DataFrame], float], score_fn_obj)
-                    score = float(score_fn(market_data))
-                    max_score = float(getattr(getattr(strategy, "cfg", None), "max_score", 1.0))
+            if self.config.strategy_name == "composite_signal" and hasattr(strategy, "score"):
+                # Composite 전략: Kelly 기반 포지션 사이징 (live_trader_gpt.py와 동일)
+                try:
+                    s_raw = strategy.score(market_data)
+                    s = float(s_raw) if isinstance(s_raw, (int, float)) else 0.0
+                except Exception:
+                    s = 0.0
 
-                    win_rate = 0.5
-                    avg_win = 1.0
-                    avg_loss = 1.0
-                    f_max = float(os.getenv("KELLY_FMAX", "0.2"))
+                try:
+                    max_score_val = getattr(getattr(strategy, "cfg", None), "max_score", 1.0) if hasattr(strategy, "cfg") else 1.0
+                    max_score = float(max_score_val) if isinstance(max_score_val, (int, float)) else 1.0
+                except Exception:
+                    max_score = 1.0
 
-                    return kelly_position_size(
-                        capital=usdt_balance,
-                        win_rate=win_rate,
-                        avg_win=avg_win,
-                        avg_loss=avg_loss,
-                        score=score,
-                        max_score=max_score,
-                        f_max=f_max,
-                        pos_min=0.0,
-                        pos_max=self.config.max_symbol_weight,
-                    )
-                # score 함수가 없으면 기본 방식으로 폴백
-                return self.position_sizer.compute_spend_amount(usdt_balance, market_data)
+                # Conservative defaults for Kelly inputs when live stats are unavailable
+                win_rate = 0.5
+                avg_win = 1.0
+                avg_loss = 1.0
+                f_max = float(os.getenv("KELLY_FMAX", "0.2"))
+
+                pos = kelly_position_size(
+                    capital=usdt_balance,
+                    win_rate=win_rate,
+                    avg_win=avg_win,
+                    avg_loss=avg_loss,
+                    score=s,
+                    max_score=max_score,
+                    f_max=f_max,
+                    pos_min=0.0,
+                    pos_max=self.config.max_symbol_weight,
+                )
+                return pos if pos >= self.config.min_order_usdt else None
             else:
-                # 기존 방식
+                # ATR 등 다른 전략: 기존 방식 사용
                 return self.position_sizer.compute_spend_amount(usdt_balance, market_data)
 
         except Exception as e:
@@ -569,7 +575,7 @@ class ImprovedLiveTrader:
         self._running = False
 
     def _shutdown(self):
-        """정리 작업"""
+        """정리 작업 (live_trader_gpt.py와 동일한 로직)"""
         self.logger.info("Shutting down Improved LiveTrader...")
 
         try:
@@ -577,57 +583,80 @@ class ImprovedLiveTrader:
             for symbol in list(self.positions.keys()):
                 self._place_sell_order(symbol)
 
-            # 최종 성과 계산
-            self._calculate_final_performance()
-
-            # 종료 알림
-            self.notifier.send("🛑 Improved Trader stopped")
-            self.trade_logger.log_event("Improved Trader stopped")
+            # 최종 성과 계산 및 기록
+            self._calculate_and_save_final_performance()
+            self.trade_logger.log_event("Final performance calculated and saved")
 
         except Exception as e:
             self.error_handler.handle_error(e, context={"operation": "shutdown"})
+        finally:
+            try:
+                # 종료 알림
+                self.notifier.send("🛑 Improved Trader stopped")
+                self.trade_logger.log_event("Improved Trader stopped")
+            except Exception:
+                pass
 
-    def _calculate_final_performance(self):
-        """최종 성과 계산"""
+    def _calculate_and_save_final_performance(self):
+        """프로그램 종료 시점의 최종 성과를 계산하고 저장 (live_trader_gpt.py와 동일)"""
         try:
-            from trader.performance_calculator import PerformanceCalculator
+            # 현재 자산 잔고 조회 (시뮬레이션 모드에서는 초기값 사용)
+            current_equity = self.config.min_order_usdt  # 기본값
 
+            if self.config.mode == "REAL":
+                try:
+                    current_equity = self._get_account_balance_usdt()
+                except Exception as e:
+                    self.logger.warning(f"Could not get real account balance: {e}")
+            else:
+                # 시뮬레이션 모드: 최소 주문 금액을 기준으로 함
+                # 실제로는 더 정확한 잔고 추적이 필요
+                current_equity = self.config.min_order_usdt
+
+            # PerformanceCalculator를 사용하여 성과 계산
+            from trader.performance_calculator import PerformanceCalculator
             calculator = PerformanceCalculator(
                 log_dir=self.trade_logger.base_dir,
                 mode=self.config.mode
             )
 
-            # 현재 활성 포지션들을 딕셔너리로 변환
-            current_positions = {
-                symbol: pos
-                for symbol, pos in self.positions.items()
-                if pos.status == "ACTIVE"
-            }
-
-            current_equity = self.config.min_order_usdt  # 기본값
-            if self.config.mode == "REAL":
-                current_equity = self.executor.get_usdt_balance()
-
+            # 남은 포지션이 없으므로 빈 딕셔너리 전달
             final_performance = calculator.calculate_performance(
-                current_positions=current_positions,
+                current_positions={},
                 current_equity=current_equity
             )
 
+            # TradeLogger를 통해 저장
             self.trade_logger.save_final_performance(final_performance)
 
-            # 성과 알림
+            # 텔레그램 알림
             total_return = final_performance.get('total_return_pct', 0.0)
             total_trades = final_performance.get('total_trades', 0)
             win_rate = final_performance.get('win_rate', 0.0)
 
-            message = "📊 FINAL PERFORMANCE REPORT\n"
-            message += f"Total Return: {total_return:.2f}%\n"
-            message += f"Total Trades: {total_trades}\n"
-            message += f"Win Rate: {win_rate:.1f}%"
+            performance_msg = (
+                "📊 FINAL PERFORMANCE REPORT\n"
+                f"Total Return: {total_return:.2f}%\n"
+                f"Total Trades: {total_trades}\n"
+                f"Win Rate: {win_rate:.1f}%\n"
+                f"Final Equity: ${final_performance.get('final_equity', current_equity):.2f}"
+            )
 
-            self.notifier.send(message)
+            if total_trades > 0:
+                profit_factor = final_performance.get('profit_factor', 0.0)
+                sharpe_ratio = final_performance.get('sharpe_ratio', 0.0)
+                performance_msg += f"\nProfit Factor: {profit_factor:.2f}"
+                if sharpe_ratio > 0:
+                    performance_msg += f"\nSharpe Ratio: {sharpe_ratio:.2f}"
+
+            self.notifier.send(performance_msg)
+
+            self.logger.info(f"Final performance calculated: {total_return:.2f}% return, "
+                          f"{total_trades} trades, {win_rate:.1f}% win rate")
 
         except Exception as e:
+            error_msg = f"❌ Error calculating final performance: {e}"
+            self.notifier.send(error_msg)
             self.error_handler.handle_error(e, context={"operation": "calculate_final_performance"})
 
 

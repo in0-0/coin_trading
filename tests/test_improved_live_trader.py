@@ -323,5 +323,187 @@ class TestPhase2StrategyActions:
             assert '_handle_partial_exit' in source
 
 
+class TestPhase3CompositeEnhancement:
+    """Phase 3: Composite 전략 지원 강화 테스트"""
+
+    def test_enhanced_kelly_position_sizing(self):
+        """강화된 켈리 포지션 사이징 테스트"""
+        with patch('improved_live_trader.get_config') as mock_config, \
+             patch('improved_live_trader.configure_dependencies'), \
+             patch('improved_live_trader.Client'), \
+             patch('improved_live_trader.ImprovedBinanceData'), \
+             patch('improved_live_trader.StateManager'), \
+             patch('improved_live_trader.Notifier'), \
+             patch('improved_live_trader.PositionSizer'), \
+             patch('improved_live_trader.TradeLogger'), \
+             patch('improved_live_trader.TradeExecutor'):
+
+            mock_config.return_value = Mock(
+                symbols=['BTCUSDT'],
+                execution_interval=60,
+                execution_timeframe='5m',
+                strategy_name='composite_signal',
+                min_order_usdt=10.0,
+                max_concurrent_positions=3,
+                max_symbol_weight=0.20,
+                atr_multiplier=0.5,
+                bracket_k_sl=1.5,
+                bracket_rr=2.0
+            )
+
+            trader = ImprovedLiveTrader()
+
+            # Mock Composite 전략 (score 메서드 포함)
+            mock_strategy = Mock()
+            mock_strategy.score = Mock(return_value=0.75)
+            mock_strategy.cfg = Mock()
+            mock_strategy.cfg.max_score = 1.0
+
+            # 테스트 데이터
+            market_data = pd.DataFrame({
+                'Open time': pd.date_range('2024-01-01', periods=30, freq='5min'),
+                'Open': [50000.0] * 30,
+                'High': [51000.0] * 30,
+                'Low': [49000.0] * 30,
+                'Close': [50500.0] * 30,
+                'Volume': [100.0] * 30
+            })
+
+            with patch.object(trader, 'strategies', {'BTCUSDT': mock_strategy}):
+                position_size = trader._calculate_position_size('BTCUSDT', 1000.0, market_data)
+
+                # 켈리 사이징이 제대로 작동하는지 확인
+                assert position_size is not None
+                assert position_size > 0
+                assert position_size <= 1000.0 * 0.20  # max_symbol_weight 제한
+
+    def test_composite_config_enhancement(self):
+        """Composite 전략 설정 강화 테스트"""
+        with patch('improved_live_trader.get_config') as mock_config, \
+             patch('improved_live_trader.configure_dependencies'):
+
+            # Mock TradingConfig에서 get_strategy_config 호출
+            from core.dependency_injection import TradingConfig
+            config = TradingConfig()
+            config.strategy_name = "composite_signal"
+            config.symbols = ["BTCUSDT"]
+            config.execution_timeframe = "5m"
+            config.atr_period = 14
+            config.atr_multiplier = 0.5
+            config.risk_per_trade = 0.005
+            config.max_symbol_weight = 0.20
+
+            strategy_config = config.get_strategy_config("BTCUSDT")
+
+            # Composite 전략 설정이 강화되었는지 확인
+            assert strategy_config.strategy_name == "composite_signal"
+            assert hasattr(strategy_config, 'ema_fast')
+            assert hasattr(strategy_config, 'ema_slow')
+            assert hasattr(strategy_config, 'bb_len')
+            assert hasattr(strategy_config, 'rsi_len')
+            assert hasattr(strategy_config, 'weights')
+            assert strategy_config.ema_fast == 12
+            assert strategy_config.ema_slow == 26
+            assert strategy_config.max_score == 1.0
+            assert strategy_config.buy_threshold == 0.3
+
+    def test_performance_calculation_and_save(self):
+        """성과 계산 및 저장 테스트"""
+        with patch('improved_live_trader.get_config') as mock_config, \
+             patch('improved_live_trader.configure_dependencies'), \
+             patch('improved_live_trader.Client'), \
+             patch('improved_live_trader.ImprovedBinanceData'), \
+             patch('improved_live_trader.StateManager'), \
+             patch('improved_live_trader.Notifier'), \
+             patch('improved_live_trader.PositionSizer'), \
+             patch('improved_live_trader.TradeLogger'), \
+             patch('improved_live_trader.TradeExecutor'):
+
+            mock_config.return_value = Mock(
+                symbols=['BTCUSDT'],
+                execution_interval=60,
+                execution_timeframe='5m',
+                strategy_name='composite_signal',
+                min_order_usdt=10.0,
+                max_concurrent_positions=3,
+                max_symbol_weight=0.20,
+                mode='SIMULATED'
+            )
+
+            trader = ImprovedLiveTrader()
+
+            # Mock TradeLogger
+            trader.trade_logger = Mock()
+            trader.trade_logger.base_dir = "/tmp/test_logs"
+            trader.trade_logger.save_final_performance = Mock()
+
+            # Mock Notifier
+            trader.notifier = Mock()
+
+            # 성과 계산 메서드 호출
+            trader._calculate_and_save_final_performance()
+
+            # TradeLogger의 save_final_performance가 호출되었는지 확인
+            trader.trade_logger.save_final_performance.assert_called_once()
+
+            # Notifier의 send가 호출되었는지 확인
+            trader.notifier.send.assert_called_once()
+            assert "FINAL PERFORMANCE REPORT" in trader.notifier.send.call_args[0][0]
+
+
+class TestPhase3Integration:
+    """Phase 3 통합 테스트"""
+
+    def test_full_composite_strategy_integration(self):
+        """완전한 Composite 전략 통합 테스트"""
+        with patch('improved_live_trader.get_config') as mock_config, \
+             patch('improved_live_trader.configure_dependencies'), \
+             patch('improved_live_trader.Client'), \
+             patch('improved_live_trader.ImprovedBinanceData'), \
+             patch('improved_live_trader.StateManager'), \
+             patch('improved_live_trader.Notifier'), \
+             patch('improved_live_trader.PositionSizer'), \
+             patch('improved_live_trader.TradeLogger'), \
+             patch('improved_live_trader.TradeExecutor'):
+
+            mock_config.return_value = Mock(
+                symbols=['BTCUSDT'],
+                execution_interval=60,
+                execution_timeframe='5m',
+                strategy_name='composite_signal',
+                min_order_usdt=10.0,
+                max_concurrent_positions=3,
+                max_symbol_weight=0.20,
+                mode='SIMULATED'
+            )
+
+            trader = ImprovedLiveTrader()
+
+            # 모든 Phase 3 기능들이 제대로 구현되었는지 확인
+            assert hasattr(trader, '_calculate_position_size')
+            assert hasattr(trader, '_calculate_and_save_final_performance')
+            assert hasattr(trader, '_get_enhanced_score_metadata')
+
+            # Composite 전략 켈리 사이징이 작동하는지 확인
+            mock_strategy = Mock()
+            mock_strategy.score = Mock(return_value=0.6)
+            mock_strategy.cfg = Mock()
+            mock_strategy.cfg.max_score = 1.0
+
+            market_data = pd.DataFrame({
+                'Open time': pd.date_range('2024-01-01', periods=30, freq='5min'),
+                'Open': [50000.0] * 30,
+                'High': [51000.0] * 30,
+                'Low': [49000.0] * 30,
+                'Close': [50500.0] * 30,
+                'Volume': [100.0] * 30
+            })
+
+            with patch.object(trader, 'strategies', {'BTCUSDT': mock_strategy}):
+                position_size = trader._calculate_position_size('BTCUSDT', 1000.0, market_data)
+                assert position_size is not None
+                assert position_size > 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
