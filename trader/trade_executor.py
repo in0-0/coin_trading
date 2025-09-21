@@ -155,19 +155,28 @@ class TradeExecutor:
 
     def market_buy(self, symbol: str, usdt_to_spend: float, positions: dict[str, Position], atr_multiplier: float, timeframe: str, *, k_sl: float = 1.0, rr: float = 1.5, score_meta: dict[str, float] | None = None) -> None:
         try:
+            logging.info(f"TradeExecutor: Starting market_buy for {symbol}, amount={usdt_to_spend}")
+
             if getattr(self, "kill_switch", False) and getattr(self, "execution_mode", "SIMULATED") == "LIVE":
                 self.notifier.send("⛔ Kill switch active. Skipping LIVE BUY order.")
+                logging.warning(f"TradeExecutor: Kill switch active, skipping BUY {symbol}")
                 return
 
             mode = getattr(self, "execution_mode", "SIMULATED")
+            logging.info(f"TradeExecutor: Execution mode: {mode}")
+
             if mode == "LIVE":
+                logging.info(f"TradeExecutor: Checking slippage for {symbol}")
                 if not self._is_slippage_within_limit(symbol):
                     self.notifier.send(f"⚠️ Skipping BUY {symbol}: spread exceeds MAX_SLIPPAGE_BPS")
+                    logging.warning(f"TradeExecutor: Slippage check failed for {symbol}")
                     return
 
                 client_order_id = self._generate_client_order_id("buy", symbol)
+                logging.info(f"TradeExecutor: Generated client_order_id: {client_order_id}")
 
                 def _place() -> dict[str, Any]:
+                    logging.debug(f"TradeExecutor: Placing order for {symbol}")
                     return self.client.create_order(
                         symbol=symbol,
                         side="BUY",
@@ -177,7 +186,9 @@ class TradeExecutor:
                         newClientOrderId=client_order_id,
                     )
 
+                logging.info(f"TradeExecutor: Executing order for {symbol}")
                 resp = self._with_retries_and_status_check(symbol, client_order_id, _place)
+                logging.info(f"TradeExecutor: Order response received: {resp is not None}")
                 if not resp:
                     self.notifier.send(f"❌ LIVE BUY FAILED {symbol}: no response")
                     return
@@ -244,15 +255,27 @@ class TradeExecutor:
                 return
 
             # SIMULATED branch (existing behavior)
+            logging.info(f"TradeExecutor: Running in SIMULATED mode for {symbol}")
             price = self.data_provider.get_current_price(symbol)
+            logging.debug(f"TradeExecutor: Current price for {symbol}: {price}")
+
             if price <= 0:
+                logging.warning(f"TradeExecutor: Invalid price for {symbol}: {price}")
                 return
+
             qty = usdt_to_spend / price
+            logging.info(f"TradeExecutor: SIMULATED buy - symbol={symbol}, qty={qty:.6f}, price={price}")
+
             # Log order for SIMULATED buy
             try:
                 if self.trade_logger is not None:
+                    logging.debug(f"TradeExecutor: Logging order for SIMULATED buy {symbol}")
                     self.trade_logger.log_order(symbol=symbol, side="BUY", price=price, qty=qty, quote_qty=usdt_to_spend, client_order_id=None)
-            except Exception:
+                    logging.debug(f"TradeExecutor: Order logged successfully for {symbol}")
+                else:
+                    logging.warning(f"TradeExecutor: TradeLogger is None, cannot log order for {symbol}")
+            except Exception as e:
+                logging.error(f"TradeExecutor: Failed to log order for {symbol}: {e}")
                 pass
             df = self.data_provider.get_and_update_klines(symbol, timeframe)
             latest_close = float(df["Close"].iloc[-1])
@@ -268,8 +291,13 @@ class TradeExecutor:
             # Log simulated fill right away
             try:
                 if self.trade_logger is not None:
+                    logging.debug(f"TradeExecutor: Logging fill for SIMULATED buy {symbol}")
                     self.trade_logger.log_fill(symbol=symbol, side="BUY", price=latest_close, qty=qty, fee=0.0, fee_asset=None, order_id=None, client_order_id=None)
-            except Exception:
+                    logging.debug(f"TradeExecutor: Fill logged successfully for {symbol}")
+                else:
+                    logging.warning(f"TradeExecutor: TradeLogger is None, cannot log fill for {symbol}")
+            except Exception as e:
+                logging.error(f"TradeExecutor: Failed to log fill for {symbol}: {e}")
                 pass
             meta = score_meta or {}
             s = meta.get("score")

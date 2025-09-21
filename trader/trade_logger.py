@@ -1,5 +1,6 @@
 import csv
 import json
+import logging
 import os
 import time
 from collections.abc import Iterable
@@ -127,11 +128,38 @@ class TradeLogger:
     def _write_csv_row(self, *, filename: str, headers: Iterable[str], row: dict) -> None:
         path = os.path.join(self.base_dir, filename)
         file_exists = os.path.exists(path)
-        with open(path, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(headers))
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(row)
+
+        # 디버그 로깅 추가
+        logging.debug(f"TradeLogger: Writing to {path}, file_exists={file_exists}")
+        logging.debug(f"TradeLogger: Row data: {row}")
+
+        try:
+            # 디렉토리 존재 확인
+            if not os.path.exists(self.base_dir):
+                logging.info(f"TradeLogger: Creating directory {self.base_dir}")
+                os.makedirs(self.base_dir, exist_ok=True)
+
+            # 파일 쓰기 권한 확인
+            if not os.access(self.base_dir, os.W_OK):
+                logging.error(f"TradeLogger: No write permission for directory {self.base_dir}")
+                raise PermissionError(f"No write permission for directory {self.base_dir}")
+
+            with open(path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=list(headers))
+                if not file_exists:
+                    writer.writeheader()
+                    logging.debug(f"TradeLogger: CSV header written for {filename}")
+                writer.writerow(row)
+                logging.debug(f"TradeLogger: Successfully wrote row to {filename}")
+        except PermissionError as e:
+            logging.error(f"TradeLogger: Permission denied writing to {path}: {e}")
+            raise
+        except OSError as e:
+            logging.error(f"TradeLogger: OS error writing to {path}: {e}")
+            raise
+        except Exception as e:
+            logging.error(f"TradeLogger: Unexpected error writing to {path}: {e}")
+            raise
 
     @staticmethod
     def _ts_ms() -> int:

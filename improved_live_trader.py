@@ -224,26 +224,36 @@ class ImprovedLiveTrader:
 
     def _find_and_execute_entries(self):
         """진입 신호 탐색 및 실행 (Phase 2,3,4 지원)"""
+        self.logger.info("LiveTrader: Starting _find_and_execute_entries")
+
         usdt_balance = self.executor.get_usdt_balance()
+        self.logger.debug(f"LiveTrader: Got USDT balance: {usdt_balance}")
 
         if usdt_balance <= self.config.min_order_usdt:
-            self.logger.info("Insufficient balance, skipping entries")
+            self.logger.info(f"LiveTrader: Insufficient balance {usdt_balance:.2f}, min required: {self.config.min_order_usdt}, skipping entries")
             return
 
         concurrent_positions = len([p for p in self.positions.values() if p.status == "ACTIVE"])
-        self.logger.info(f"USDT Balance: {usdt_balance:.2f}, Active positions: {concurrent_positions}/{self.config.max_concurrent_positions}")
+        self.logger.info(f"LiveTrader: USDT Balance: {usdt_balance:.2f}, Active positions: {concurrent_positions}/{self.config.max_concurrent_positions}")
 
         for symbol in self.config.symbols:
+            self.logger.debug(f"LiveTrader: Processing symbol {symbol}")
+
             if symbol in self.positions or concurrent_positions >= self.config.max_concurrent_positions:
+                self.logger.debug(f"LiveTrader: Skipping {symbol} - already has position or position limit reached")
                 continue
 
             try:
                 strategy = self.strategies[symbol]
+                self.logger.debug(f"LiveTrader: Got strategy for {symbol}")
+
                 market_data = self.data_provider.get_and_update_klines(symbol, self.config.execution_timeframe)
+                self.logger.debug(f"LiveTrader: Got market data for {symbol}, shape: {market_data.shape}")
+
                 current_position = self.positions.get(symbol)
 
                 signal = strategy.get_signal(market_data, current_position)
-                self.logger.info(f"Signal for {symbol}: {signal}")
+                self.logger.info(f"LiveTrader: Signal for {symbol}: {signal}")
 
                 # Phase 1: 포지션 액션 처리 (향후 Phase 2, 3, 4에서 확장)
                 position_actions = []
@@ -252,8 +262,9 @@ class ImprovedLiveTrader:
                         action = strategy.get_position_action(market_data, current_position)
                         if action:
                             position_actions.append(action)
+                            self.logger.info(f"LiveTrader: Position action found for {symbol}: {action.action_type}")
                     except Exception as e:
-                        self.logger.warning(f"Error getting position action for {symbol}: {e}")
+                        self.logger.warning(f"LiveTrader: Error getting position action for {symbol}: {e}")
 
                 # Phase 2, 3 & 4: 포지션 액션 처리
                 for action in position_actions:
@@ -265,19 +276,24 @@ class ImprovedLiveTrader:
                         self._handle_partial_exit(symbol, action, current_position)
 
                 if signal == Signal.BUY:
-                    self.logger.info(f"BUY signal detected for {symbol}, executing order")
+                    self.logger.info(f"LiveTrader: BUY signal detected for {symbol}, executing order")
                     self._execute_buy_order(symbol, usdt_balance, market_data)
                     concurrent_positions += 1
+                    self.logger.debug(f"LiveTrader: Updated concurrent_positions: {concurrent_positions}")
 
                 elif signal == Signal.SELL:
+                    self.logger.info(f"LiveTrader: SELL signal detected for {symbol}, executing order")
                     self._place_sell_order(symbol)
 
             except Exception as e:
+                self.logger.error(f"LiveTrader: Exception processing {symbol}: {e}")
                 self.error_handler.handle_error(
                     e,
                     context={"symbol": symbol, "operation": "find_entries"},
                     notify=False
                 )
+
+        self.logger.info("LiveTrader: Completed _find_and_execute_entries")
 
     def _handle_position_addition(self, symbol: str, action: dict, position: Position, market_data: pd.DataFrame):
         """Phase 2: 불타기/물타기 포지션 추가 처리"""
@@ -415,15 +431,20 @@ class ImprovedLiveTrader:
     def _execute_buy_order(self, symbol: str, usdt_balance: float, market_data: pd.DataFrame):
         """매수 주문 실행 (메타데이터 수집 강화)"""
         try:
+            self.logger.info(f"LiveTrader: Starting _execute_buy_order for {symbol}")
+
             spend_amount = self._calculate_position_size(symbol, usdt_balance, market_data)
+            self.logger.debug(f"LiveTrader: Calculated spend_amount for {symbol}: {spend_amount}")
 
             if not spend_amount or spend_amount < self.config.min_order_usdt:
+                self.logger.info(f"LiveTrader: Insufficient spend_amount for {symbol}: {spend_amount}, min required: {self.config.min_order_usdt}")
                 return
 
             # 스코어 메타 정보 수집 (개선된 버전)
             score_meta = self._get_enhanced_score_metadata(symbol, market_data, usdt_balance, spend_amount)
+            self.logger.info(f"LiveTrader: Score meta for {symbol}: {score_meta}")
 
-            self.logger.info(f"Executing BUY for {symbol}: {spend_amount}, meta: {score_meta}")
+            self.logger.info(f"LiveTrader: Executing BUY for {symbol}: {spend_amount}, meta: {score_meta}")
 
             # 주문 실행 (실제 주문 로직은 executor에 위임)
             self.executor.market_buy(
@@ -437,7 +458,10 @@ class ImprovedLiveTrader:
                 score_meta=score_meta or {},
             )
 
+            self.logger.info(f"LiveTrader: market_buy completed for {symbol}")
+
         except Exception as e:
+            self.logger.error(f"LiveTrader: Exception in _execute_buy_order for {symbol}: {e}")
             self.error_handler.handle_error(
                 e,
                 context={"symbol": symbol, "operation": "execute_buy"},
