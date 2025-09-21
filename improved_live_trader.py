@@ -231,6 +231,7 @@ class ImprovedLiveTrader:
             return
 
         concurrent_positions = len([p for p in self.positions.values() if p.status == "ACTIVE"])
+        self.logger.info(f"USDT Balance: {usdt_balance:.2f}, Active positions: {concurrent_positions}/{self.config.max_concurrent_positions}")
 
         for symbol in self.config.symbols:
             if symbol in self.positions or concurrent_positions >= self.config.max_concurrent_positions:
@@ -242,6 +243,7 @@ class ImprovedLiveTrader:
                 current_position = self.positions.get(symbol)
 
                 signal = strategy.get_signal(market_data, current_position)
+                self.logger.info(f"Signal for {symbol}: {signal}")
 
                 # Phase 1: 포지션 액션 처리 (향후 Phase 2, 3, 4에서 확장)
                 position_actions = []
@@ -263,6 +265,7 @@ class ImprovedLiveTrader:
                         self._handle_partial_exit(symbol, action, current_position)
 
                 if signal == Signal.BUY:
+                    self.logger.info(f"BUY signal detected for {symbol}, executing order")
                     self._execute_buy_order(symbol, usdt_balance, market_data)
                     concurrent_positions += 1
 
